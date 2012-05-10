@@ -1540,7 +1540,7 @@ struct dentry *d_make_root(struct inode *root_inode)
 	struct dentry *res = NULL;
 
 	if (root_inode) {
-		static const struct qstr name = { .name = "/", .len = 1 };
+		static const struct qstr name = QSTR_INIT("/", 1);
 
 		res = __d_alloc(root_inode->i_sb, &name);
 		if (res)
@@ -1809,10 +1809,9 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 				const struct qstr *name,
 				unsigned *seqp, struct inode **inode)
 {
-	unsigned int len = name->len;
-	unsigned int hash = name->hash;
+	u64 hashlen = name->hash_len;
 	const unsigned char *str = name->name;
-	struct hlist_bl_head *b = d_hash(parent, hash);
+	struct hlist_bl_head *b = d_hash(parent, hashlen_hash(hashlen));
 	struct hlist_bl_node *node;
 	struct dentry *dentry;
 
@@ -1838,49 +1837,47 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 	 */
 	hlist_bl_for_each_entry_rcu(dentry, node, b, d_hash) {
 		unsigned seq;
-		struct inode *i;
-		const char *tname;
-		int tlen;
-
-		if (dentry->d_name.hash != hash)
-			continue;
 
 seqretry:
-		seq = read_seqcount_begin(&dentry->d_seq);
+		/*
+		 * The dentry sequence count protects us from concurrent
+		 * renames, and thus protects inode, parent and name fields.
+		 *
+		 * The caller must perform a seqcount check in order
+		 * to do anything useful with the returned dentry,
+		 * including using the 'd_inode' pointer.
+		 *
+		 * NOTE! We do a "raw" seqcount_begin here. That means that
+		 * we don't wait for the sequence count to stabilize if it
+		 * is in the middle of a sequence change. If we do the slow
+		 * dentry compare, we will do seqretries until it is stable,
+		 * and if we end up with a successful lookup, we actually
+		 * want to exit RCU lookup anyway.
+		 */
+		seq = raw_seqcount_begin(&dentry->d_seq);
 		if (dentry->d_parent != parent)
 			continue;
 		if (d_unhashed(dentry))
 			continue;
-		tlen = dentry->d_name.len;
-		tname = dentry->d_name.name;
-		i = dentry->d_inode;
-		prefetch(tname);
-		/*
-		 * This seqcount check is required to ensure name and
-		 * len are loaded atomically, so as not to walk off the
-		 * edge of memory when walking. If we could load this
-		 * atomically some other way, we could drop this check.
-		 */
-		if (read_seqcount_retry(&dentry->d_seq, seq))
-			goto seqretry;
-		if (unlikely(parent->d_flags & DCACHE_OP_COMPARE)) {
-			if (parent->d_op->d_compare(parent, *inode,
-						dentry, i,
-						tlen, tname, name))
-				continue;
-		} else {
-			if (dentry_cmp(tname, tlen, str, len))
-				continue;
-		}
-		/*
-		 * No extra seqcount check is required after the name
-		 * compare. The caller must perform a seqcount check in
-		 * order to do anything useful with the returned dentry
-		 * anyway.
-		 */
 		*seqp = seq;
-		*inode = i;
-		return dentry;
+
+		if (unlikely(parent->d_flags & DCACHE_OP_COMPARE)) {
+			if (dentry->d_name.hash != hashlen_hash(hashlen))
+				continue;
+			switch (slow_dentry_cmp(parent, inode, dentry, seq, name)) {
+			case D_COMP_OK:
+				return dentry;
+			case D_COMP_NOMATCH:
+				continue;
+			default:
+				goto seqretry;
+			}
+		}
+
+		if (dentry->d_name.hash_len != hashlen)
+			continue;
+		if (!dentry_cmp(dentry, str, hashlen_len(hashlen)))
+			return dentry;
 	}
 	return NULL;
 }
