@@ -30,7 +30,9 @@ struct ring_buffer {
 	spinlock_t			event_lock;
 	struct list_head		event_list;
 
-	int				mmap_locked;
+	atomic_t			mmap_count;
+	unsigned long			mmap_locked;
+
 	struct user_struct		*mmap_user;
 
 	/* AUX area */
