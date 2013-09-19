@@ -3020,7 +3020,6 @@ EXPORT_SYMBOL_GPL(perf_event_release_kernel);
 
 static void put_event(struct perf_event *event)
 {
-	struct perf_event *event = file->private_data;
 	struct task_struct *owner;
 
 	if (!atomic_long_dec_and_test(&event->refcount))
@@ -3435,6 +3434,26 @@ static void calc_timer_values(struct perf_event *event,
 	ctx_time = event->shadow_ctx_time + *now;
 	*enabled = ctx_time - event->tstamp_enabled;
 	*running = ctx_time - event->tstamp_running;
+}
+
+static void perf_event_init_userpage(struct perf_event *event)
+{
+       struct perf_event_mmap_page *userpg;
+       struct ring_buffer *rb;
+
+       rcu_read_lock();
+       rb = rcu_dereference(event->rb);
+       if (!rb)
+               goto unlock;
+
+       userpg = rb->user_page;
+
+       /* Allow new userspace to detect that bit 0 is deprecated */
+       userpg->cap_bit0_is_deprecated = 1;
+       userpg->size = offsetof(struct perf_event_mmap_page, __reserved);
+
+unlock:
+       rcu_read_unlock();
 }
 
 void __weak arch_perf_update_userpage(struct perf_event_mmap_page *userpg, u64 now)
