@@ -561,8 +561,8 @@ up:
 	mutex_lock(&parent->d_inode->i_mutex);
 
 	if (child != dentry) {
-		next = list_entry(child->d_u.d_child.next, struct dentry,
-					d_u.d_child);
+		next = list_entry(child->d_child.next, struct dentry,
+					d_child);
 		goto up;
 	}
 
