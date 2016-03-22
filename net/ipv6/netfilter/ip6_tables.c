@@ -670,10 +670,6 @@ find_check_entry(struct ip6t_entry *e, struct net *net, const char *name,
 	struct xt_mtchk_param mtpar;
 	struct xt_entry_match *ematch;
 
-	//e->counters.pcnt = xt_percpu_counter_alloc();
- 	//if (IS_ERR_VALUE(e->counters.pcnt))
- 	//	return -ENOMEM;
-
 	j = 0;
 	mtpar.net	= net;
 	mtpar.table     = name;
@@ -752,6 +748,10 @@ check_entry_size_and_hooks(struct ip6t_entry *e,
 			 e, e->next_offset);
 		return -EINVAL;
 	}
+
+	err = check_entry(e);
+	if (err)
+		return err;
 
 	/* Check hooks & underflows */
 	for (h = 0; h < NF_INET_NUMHOOKS; h++) {

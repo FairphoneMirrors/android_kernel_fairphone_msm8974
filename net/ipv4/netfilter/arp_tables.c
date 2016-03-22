@@ -515,10 +515,6 @@ find_check_entry(struct arpt_entry *e, const char *name, unsigned int size)
 	struct xt_target *target;
 	int ret;
 
-    //e->counters.pcnt = xt_percpu_counter_alloc();
-	//if (IS_ERR_VALUE(e->counters.pcnt))
-	//	return -ENOMEM;
-
 	t = arpt_get_target(e);
 	target = xt_request_find_target(NFPROTO_ARP, t->u.user.name,
 					t->u.user.revision);
@@ -581,6 +577,10 @@ static inline int check_entry_size_and_hooks(struct arpt_entry *e,
     err = check_entry(e);
     if (err)
         return err;
+
+	err = check_entry(e);
+	if (err)
+		return err;
 
 	/* Check hooks & underflows */
 	for (h = 0; h < NF_ARP_NUMHOOKS; h++) {
@@ -1238,7 +1238,7 @@ check_compat_entry_size_and_hooks(struct compat_arpt_entry *e,
 	}
 
 	/* For purposes of check_entry casting the compat entry is fine */
-    ret = check_entry((struct arpt_entry *)e);
+	ret = check_entry((struct arpt_entry *)e);
 	if (ret)
 		return ret;
 
