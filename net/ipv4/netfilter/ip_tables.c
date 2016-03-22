@@ -569,7 +569,7 @@ check_entry(const struct ipt_entry *e)
 {
 	const struct xt_entry_target *t;
 
-	if (!ip_checkentry(&e->ip)) 
+	if (!ip_checkentry(&e->ip))
 		return -EINVAL;
 
 	if (e->target_offset + sizeof(struct xt_entry_target) >
@@ -728,9 +728,11 @@ check_entry_size_and_hooks(struct ipt_entry *e,
 			   unsigned int valid_hooks)
 {
 	unsigned int h;
-    int err;
+    	int err;
+
 	if ((unsigned long)e % __alignof__(struct ipt_entry) != 0 ||
-	    (unsigned char *)e + sizeof(struct ipt_entry) >= limit) {
+	    (unsigned char *)e + sizeof(struct ipt_entry) >= limit ||
+	    (unsigned char *)e + e->next_offset > limit) {
 		duprintf("Bad offset %p\n", e);
 		return -EINVAL;
 	}
@@ -1491,7 +1493,8 @@ check_compat_entry_size_and_hooks(struct compat_ipt_entry *e,
 
 	duprintf("check_compat_entry_size_and_hooks %p\n", e);
 	if ((unsigned long)e % __alignof__(struct compat_ipt_entry) != 0 ||
-	    (unsigned char *)e + sizeof(struct compat_ipt_entry) >= limit) {
+	    (unsigned char *)e + sizeof(struct compat_ipt_entry) >= limit ||
+	    (unsigned char *)e + e->next_offset > limit) {
 		duprintf("Bad offset %p, limit = %p\n", e, limit);
 		return -EINVAL;
 	}
