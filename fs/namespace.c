@@ -768,9 +768,9 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 	mnt->mnt.mnt_root = dget(root);
 	mnt->mnt_mountpoint = mnt->mnt.mnt_root;
 	mnt->mnt_parent = mnt;
-	br_write_lock(&vfsmount_lock);
+	br_write_lock(vfsmount_lock);
 	list_add_tail(&mnt->mnt_instance, &sb->s_mounts);
-	br_write_unlock(&vfsmount_lock);
+	br_write_unlock(vfsmount_lock);
 
 	if (flag & CL_SLAVE) {
 		list_add(&mnt->mnt_slave, &old->mnt_slave_list);
@@ -1734,9 +1734,9 @@ static int do_remount(struct path *path, int flags, int mnt_flags,
 		err = change_mount_flags(path->mnt, flags);
 	else {
 		err = do_remount_sb2(path->mnt, sb, flags, data, 0);
-		br_write_lock(&vfsmount_lock);
+		br_write_lock(vfsmount_lock);
 		propagate_remount(mnt);
-		br_write_unlock(&vfsmount_lock);
+		br_write_unlock(vfsmount_lock);
 	}
 	if (!err) {
 		br_write_lock(vfsmount_lock);
