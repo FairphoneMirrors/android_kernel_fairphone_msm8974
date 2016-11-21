@@ -231,12 +231,6 @@ static long do_locks(unsigned int fd, unsigned int cmd,
 asmlinkage long sys_oabi_fcntl64(unsigned int fd, unsigned int cmd,
 				 unsigned long arg)
 {
-	struct oabi_flock64 user;
-	struct flock64 kernel;
-	mm_segment_t fs = USER_DS; /* initialized to kill a warning */
-	unsigned long local_arg = arg;
-	int ret;
-
 	switch (cmd) {
 	case F_GETLK64:
 	case F_SETLK64:
@@ -246,8 +240,6 @@ asmlinkage long sys_oabi_fcntl64(unsigned int fd, unsigned int cmd,
 	default:
 		return sys_fcntl64(fd, cmd, arg);
 	}
-
-	return ret;
 }
 
 struct oabi_epoll_event {
