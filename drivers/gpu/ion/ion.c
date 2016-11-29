@@ -376,13 +376,20 @@ static int ion_handle_put_nolock(struct ion_handle *handle)
     return ret;
 }
 
+static int ion_handle_put_nolock(struct ion_handle *handle)
+{
+    int ret;
+    ret = kref_put(&handle->ref, ion_handle_destroy);
+    return ret;
+}
+
 int ion_handle_put(struct ion_handle *handle)
 {
 	struct ion_client *client = handle->client;
 	int ret;
 
 	mutex_lock(&client->lock);
-    ret = ion_handle_put_nolock(handle);
+	ret = ion_handle_put_nolock(handle);
 	mutex_unlock(&client->lock);
 
 	return ret;
@@ -602,7 +609,7 @@ static void ion_free_nolock(struct ion_client *client, struct ion_handle *handle
 		WARN(1, "%s: invalid handle passed to free.\n", __func__);
 		return;
 	}
-    ion_handle_put_nolock(handle);
+	ion_handle_put_nolock(handle);
 }
 
 void ion_free(struct ion_client *client, struct ion_handle *handle)
