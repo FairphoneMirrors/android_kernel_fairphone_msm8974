@@ -1534,7 +1534,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 	if ((ioctl_ptr->ioctl_ptr == NULL) || (ioctl_ptr->len == 0)) {
-		pr_err("ioctl_ptr OR ioctl_ptr->len is NULL  %p %d\n",
+		pr_err("ioctl_ptr OR ioctl_ptr->len is NULL  %pK %d\n",
 			ioctl_ptr, ioctl_ptr->len);
 		return -EINVAL;
 	}
