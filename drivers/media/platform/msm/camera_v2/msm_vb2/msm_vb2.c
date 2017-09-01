@@ -46,22 +46,23 @@ int msm_vb2_buf_init(struct vb2_buffer *vb)
 	struct msm_stream *stream;
 	struct msm_session *session;
 	struct msm_vb2_buffer *msm_vb2_buf;
+	unsigned long rl_flags;
 
 	session = msm_get_session_from_vb2q(vb->vb2_queue);
 	if (IS_ERR_OR_NULL(session))
 		return -EINVAL;
 
-	read_lock(&session->stream_rwlock);
+	read_lock_irqsave(&session->stream_rwlock, rl_flags);
 
 	stream = msm_get_stream_from_vb2q(vb->vb2_queue);
 	if (!stream) {
 		pr_err("%s: Couldn't find stream\n", __func__);
-		read_unlock(&session->stream_rwlock);
+		read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 		return -EINVAL;
 	}
 	msm_vb2_buf = container_of(vb, struct msm_vb2_buffer, vb2_buf);
 	msm_vb2_buf->in_freeq = 0;
-	read_unlock(&session->stream_rwlock);
+	read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 	return 0;
 }
 
@@ -70,7 +71,7 @@ static void msm_vb2_buf_queue(struct vb2_buffer *vb)
 	struct msm_vb2_buffer *msm_vb2;
 	struct msm_stream *stream;
 	struct msm_session *session;
-	unsigned long flags;
+	unsigned long flags, rl_flags;
 
 	msm_vb2 = container_of(vb, struct msm_vb2_buffer, vb2_buf);
 
@@ -83,19 +84,19 @@ static void msm_vb2_buf_queue(struct vb2_buffer *vb)
 	if (IS_ERR_OR_NULL(session))
 		return;
 
-	read_lock(&session->stream_rwlock);
+	read_lock_irqsave(&session->stream_rwlock, rl_flags);
 
 	stream = msm_get_stream_from_vb2q(vb->vb2_queue);
 	if (!stream) {
 		pr_err("%s:%d] NULL stream", __func__, __LINE__);
-		read_unlock(&session->stream_rwlock);
+		read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 		return;
 	}
 
 	spin_lock_irqsave(&stream->stream_lock, flags);
 	list_add_tail(&msm_vb2->list, &stream->queued_list);
 	spin_unlock_irqrestore(&stream->stream_lock, flags);
-	read_unlock(&session->stream_rwlock);
+	read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 }
 
 static int msm_vb2_buf_finish(struct vb2_buffer *vb)
@@ -103,7 +104,7 @@ static int msm_vb2_buf_finish(struct vb2_buffer *vb)
 	struct msm_vb2_buffer *msm_vb2;
 	struct msm_stream *stream;
 	struct msm_session *session;
-	unsigned long flags;
+	unsigned long flags, rl_flags;
 	struct msm_vb2_buffer *msm_vb2_entry, *temp;
 
 	msm_vb2 = container_of(vb, struct msm_vb2_buffer, vb2_buf);
@@ -117,12 +118,12 @@ static int msm_vb2_buf_finish(struct vb2_buffer *vb)
 	if (IS_ERR_OR_NULL(session))
 		return -EINVAL;
 
-	read_lock(&session->stream_rwlock);
+	read_lock_irqsave(&session->stream_rwlock, rl_flags);
 
 	stream = msm_get_stream_from_vb2q(vb->vb2_queue);
 	if (!stream) {
 		pr_err("%s:%d] NULL stream", __func__, __LINE__);
-		read_unlock(&session->stream_rwlock);
+		read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 		return -EINVAL;
 	}
 
@@ -135,7 +136,7 @@ static int msm_vb2_buf_finish(struct vb2_buffer *vb)
 		}
 	}
 	spin_unlock_irqrestore(&stream->stream_lock, flags);
-	read_unlock(&session->stream_rwlock);
+	read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 	return 0;
 }
 
@@ -144,7 +145,7 @@ static void msm_vb2_buf_cleanup(struct vb2_buffer *vb)
 	struct msm_vb2_buffer *msm_vb2;
 	struct msm_stream *stream;
 	struct msm_session *session;
-	unsigned long flags;
+	unsigned long flags, rl_flags;
 
 	msm_vb2 = container_of(vb, struct msm_vb2_buffer, vb2_buf);
 
@@ -157,19 +158,19 @@ static void msm_vb2_buf_cleanup(struct vb2_buffer *vb)
 	if (IS_ERR_OR_NULL(session))
 		return;
 
-	read_lock(&session->stream_rwlock);
+	read_lock_irqsave(&session->stream_rwlock, rl_flags);
 
 	stream = msm_get_stream_from_vb2q(vb->vb2_queue);
 	if (!stream) {
 		pr_err("%s:%d] NULL stream", __func__, __LINE__);
-		read_unlock(&session->stream_rwlock);
+		read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 		return;
 	}
 
 	spin_lock_irqsave(&stream->stream_lock, flags);
 	INIT_LIST_HEAD(&stream->queued_list);
 	spin_unlock_irqrestore(&stream->stream_lock, flags);
-	read_unlock(&session->stream_rwlock);
+	read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 }
 
 int msm_vb2_get_stream_state(struct msm_stream *stream)
@@ -245,17 +246,17 @@ static struct vb2_buffer *msm_vb2_get_buf(int session_id,
 	struct msm_session *session;
 	struct vb2_buffer *vb2_buf = NULL;
 	struct msm_vb2_buffer *msm_vb2 = NULL;
-	unsigned long flags;
+	unsigned long flags, rl_flags;
 
 	session = msm_get_session(session_id);
 	if (IS_ERR_OR_NULL(session))
 		return NULL;
 
-	read_lock(&session->stream_rwlock);
+	read_lock_irqsave(&session->stream_rwlock, rl_flags);
 
 	stream = msm_get_stream(session, stream_id);
 	if (IS_ERR_OR_NULL(stream)) {
-		read_unlock(&session->stream_rwlock);
+		read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 		return NULL;
 	}
 
@@ -281,7 +282,7 @@ static struct vb2_buffer *msm_vb2_get_buf(int session_id,
 	vb2_buf = NULL;
 end:
 	spin_unlock_irqrestore(&stream->stream_lock, flags);
-	read_unlock(&session->stream_rwlock);
+	read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 	return vb2_buf;
 }
 
@@ -293,17 +294,17 @@ static int msm_vb2_put_buf(struct vb2_buffer *vb, int session_id,
 	struct msm_vb2_buffer *msm_vb2;
 	struct vb2_buffer *vb2_buf = NULL;
 	int rc = 0;
-	unsigned long flags;
+	unsigned long flags, rl_flags;
 
 	session = msm_get_session(session_id);
 	if (IS_ERR_OR_NULL(session))
 		return -EINVAL;
 
-	read_lock(&session->stream_rwlock);
+	read_lock_irqsave(&session->stream_rwlock, rl_flags);
 
 	stream = msm_get_stream(session, stream_id);
 	if (IS_ERR_OR_NULL(stream)) {
-		read_unlock(&session->stream_rwlock);
+		read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 		return -EINVAL;
 	}
 
@@ -318,7 +319,7 @@ static int msm_vb2_put_buf(struct vb2_buffer *vb, int session_id,
 			pr_err("VB buffer is INVALID vb=%p, ses_id=%d, str_id=%d\n",
 					vb, session_id, stream_id);
 			spin_unlock_irqrestore(&stream->stream_lock, flags);
-			read_unlock(&session->stream_rwlock);
+			read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 			return -EINVAL;
 		}
 		msm_vb2 =
@@ -334,14 +335,14 @@ static int msm_vb2_put_buf(struct vb2_buffer *vb, int session_id,
 		rc = -EINVAL;
 	}
 	spin_unlock_irqrestore(&stream->stream_lock, flags);
-	read_unlock(&session->stream_rwlock);
+	read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 	return rc;
 }
 
 static int msm_vb2_buf_done(struct vb2_buffer *vb, int session_id,
 				unsigned int stream_id)
 {
-	unsigned long flags;
+	unsigned long flags, rl_flags;
 	struct msm_vb2_buffer *msm_vb2;
 	struct msm_stream *stream;
 	struct msm_session *session;
@@ -352,11 +353,11 @@ static int msm_vb2_buf_done(struct vb2_buffer *vb, int session_id,
 	if (IS_ERR_OR_NULL(session))
 		return 0;
 
-	read_lock(&session->stream_rwlock);
+	read_lock_irqsave(&session->stream_rwlock, rl_flags);
 
 	stream = msm_get_stream(session, stream_id);
 	if (IS_ERR_OR_NULL(stream)) {
-		read_unlock(&session->stream_rwlock);
+		read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 		return -EINVAL;
 	}
 
@@ -371,7 +372,7 @@ static int msm_vb2_buf_done(struct vb2_buffer *vb, int session_id,
 			pr_err("VB buffer is INVALID ses_id=%d, str_id=%d, vb=%p\n",
 				    session_id, stream_id, vb);
 			spin_unlock_irqrestore(&stream->stream_lock, flags);
-			read_unlock(&session->stream_rwlock);
+			read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 			return -EINVAL;
 		}
 		msm_vb2 =
@@ -389,7 +390,7 @@ static int msm_vb2_buf_done(struct vb2_buffer *vb, int session_id,
 		rc = -EINVAL;
 	}
 	spin_unlock_irqrestore(&stream->stream_lock, flags);
-	read_unlock(&session->stream_rwlock);
+	read_unlock_irqrestore(&session->stream_rwlock, rl_flags);
 	return rc;
 }
 
