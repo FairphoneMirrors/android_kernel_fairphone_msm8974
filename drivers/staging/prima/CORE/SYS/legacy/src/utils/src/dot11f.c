@@ -232,6 +232,8 @@ static void framesDump(tpAniSirGlobal pCtx, int nSev, tANI_U8 *pBuf, int nBuf)
      framesLog((ctx), (sev), (fmt), (p1), (p2));
 #define FRAMES_LOG3(ctx, sev, fmt, p1, p2, p3) \
      framesLog((ctx), (sev), (fmt), (p1), (p2), (p3));
+#define FRAMES_LOG4(ctx, sev, fmt, p1, p2, p3, p4) \
+     framesLog((ctx), (sev), (fmt), (p1), (p2), (p3), (p4));
 #define FRAMES_DUMP(ctx, sev, p, n) \
      framesDump((ctx), (sev), (p), (n));
 #ifndef FRAMES_SEV_FOR_FRAME
@@ -245,6 +247,7 @@ static void framesDump(tpAniSirGlobal pCtx, int nSev, tANI_U8 *pBuf, int nBuf)
 #   define FRAMES_LOG1(ctx, sev, fmt, p1)
 #   define FRAMES_LOG2(ctx, sev, fmt, p1, p2)
 #   define FRAMES_LOG3(ctx, sev, fmt, p1, p2, p3)
+#   define FRAMES_LOG4(ctx, sev, fmt, p1, p2, p3, p4)
 #   define FRAMES_DUMP(ctx, sev, p, n)
 #   ifndef FRAMES_SEV_FOR_FRAME
 #       define FRAMES_SEV_FOR_FRAME(ctx, sig) FRLOG3
@@ -482,7 +485,7 @@ static tANI_U32 GetContainerIesLen(tpAniSirGlobal pCtx,
     len += 2;
     while ( len < nBuf )
     {
-        if( NULL == (pIe =  FindIEDefn(pCtx, pBufRemaining, nBuf + len, IEs)))
+        if( NULL == (pIe =  FindIEDefn(pCtx, pBufRemaining, nBuf - len, IEs)))
              break;
         if( pIe->eid == pIeFirst->eid )
              break;
@@ -490,7 +493,7 @@ static tANI_U32 GetContainerIesLen(tpAniSirGlobal pCtx,
         pBufRemaining += *(pBufRemaining + 1) + 2;
     }
 
-    if (len > 0xFF)
+    if ((len > 0xFF) || (len > nBuf))
         return DOT11F_INTERNAL_ERROR;
     *pnConsumed = len;
     return DOT11F_PARSE_SUCCESS;
@@ -20712,12 +20715,15 @@ static tANI_U32 UnpackCore(tpAniSirGlobal pCtx,
 
         if (pIe)
         {
-            if (nBufRemaining < pIe->minSize - pIe->noui - 2U)
-            {
-                FRAMES_LOG3(pCtx, FRLOGW, FRFL("The IE %s must be "
-                    "at least %d bytes in size, but there are onl"
-                    "y %d bytes remaining in this frame.\n"),
-                    pIe->name, pIe->minSize, nBufRemaining);
+            if ((nBufRemaining < pIe->minSize - pIe->noui - 2U) ||
+                (len < pIe->minSize - pIe->noui - 2U)) {
+                FRAMES_LOG4(pCtx, FRLOGW, FRFL("The IE %s must "
+                    "be at least %d bytes in size, but "
+                    "there are only %d bytes remaining in "
+                    "this frame or the IE reports a size "
+                    "of %d bytes.\n"),
+                    pIe->name, pIe->minSize, nBufRemaining,
+                    (len + pIe->noui + 2U));
                 FRAMES_DUMP(pCtx, FRLOG1, pBuf, nBuf);
                 status |= DOT11F_INCOMPLETE_IE;
                 FRAMES_DBG_BREAK();
