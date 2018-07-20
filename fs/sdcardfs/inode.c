@@ -85,8 +85,11 @@ static int sdcardfs_create(struct inode *dir, struct dentry *dentry,
 	/* temporarily change umask for lower fs write */
 	saved_fs = current->fs;
 	copied_fs = copy_fs_struct(current->fs);
+	copied_fs->umask = 0;
+	task_lock(current);
 	current->fs = copied_fs;
-	current->fs->umask = 0;
+	task_unlock(current);
+
 	err = vfs_create(lower_parent_dentry->d_inode, lower_dentry, mode, nd);
 	if (err)
 		goto out;
@@ -99,7 +102,9 @@ static int sdcardfs_create(struct inode *dir, struct dentry *dentry,
 
 out:
 	mnt_drop_write(lower_path.mnt);
+	task_lock(current);
 	current->fs = saved_fs;
+	task_unlock(current);
 	free_fs_struct(copied_fs);
 out_unlock:
 	unlock_dir(lower_parent_dentry);
@@ -315,8 +320,11 @@ static int sdcardfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode
 	/* temporarily change umask for lower fs write */
 	saved_fs = current->fs;
 	copied_fs = copy_fs_struct(current->fs);
+	copied_fs->umask = 0;
+	task_lock(current);
 	current->fs = copied_fs;
-	current->fs->umask = 0;
+	task_unlock(current);
+
 	err = vfs_mkdir(lower_parent_dentry->d_inode, lower_dentry, mode);
 
 	if (err)
@@ -367,7 +375,10 @@ static int sdcardfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode
 	}
 out:
 	mnt_drop_write(lower_path.mnt);
+	task_lock(current);
 	current->fs = saved_fs;
+	task_unlock(current);
+
 	free_fs_struct(copied_fs);
 out_unlock:
 	unlock_dir(lower_parent_dentry);
