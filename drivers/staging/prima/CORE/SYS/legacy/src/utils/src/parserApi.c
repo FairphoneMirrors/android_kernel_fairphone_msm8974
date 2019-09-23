@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015,2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1585,8 +1585,7 @@ PopulateDot11fSuppRates(tpAniSirGlobal      pMac,
 tSirRetStatus
 PopulateDot11fRatesTdls(tpAniSirGlobal p_mac,
                            tDot11fIESuppRates *p_supp_rates,
-                           tDot11fIEExtSuppRates *p_ext_supp_rates,
-                           tANI_U8 curr_oper_channel)
+                           tDot11fIEExtSuppRates *p_ext_supp_rates)
 {
     tSirMacRateSet temp_rateset;
     tSirMacRateSet temp_rateset2;
@@ -1596,22 +1595,15 @@ PopulateDot11fRatesTdls(tpAniSirGlobal p_mac,
     wlan_cfgGetInt(p_mac, WNI_CFG_DOT11_MODE, &self_dot11mode);
 
     /**
-     * Include 11b rates only when the device configured
-     * in auto, 11a/b/g or 11b_only and also if current base
-     * channel is 5 GHz then no need to advertise the 11b rates.
-     * If devices to move 2.4GHz off-channel then they can communicate
-     * in 11g rates i.e. (6, 9, 12, 18, 24, 36 and 54).
+     * Include 11b rates only when the device configured in
+     * auto, 11a/b/g or 11b_only
      */
-    limLog(p_mac, LOG1, FL("Current operating channel %d self_dot11mode = %d"),
-           curr_oper_channel, self_dot11mode);
-
-    if ((curr_oper_channel <= SIR_11B_CHANNEL_END) &&
-        ((self_dot11mode == WNI_CFG_DOT11_MODE_ALL) ||
+    if ((self_dot11mode == WNI_CFG_DOT11_MODE_ALL) ||
         (self_dot11mode == WNI_CFG_DOT11_MODE_11A) ||
         (self_dot11mode == WNI_CFG_DOT11_MODE_11AC) ||
         (self_dot11mode == WNI_CFG_DOT11_MODE_11N) ||
         (self_dot11mode == WNI_CFG_DOT11_MODE_11G) ||
-        (self_dot11mode == WNI_CFG_DOT11_MODE_11B)))
+        (self_dot11mode == WNI_CFG_DOT11_MODE_11B) )
     {
             val = WNI_CFG_SUPPORTED_RATES_11B_LEN;
             wlan_cfgGetStr(p_mac, WNI_CFG_SUPPORTED_RATES_11B,
@@ -2699,7 +2691,7 @@ sirConvertAssocRespFrame2Struct(tpAniSirGlobal pMac,
         pAssocRsp->num_tspecs = ar.num_WMMTSPEC;
         for (cnt=0; cnt < ar.num_WMMTSPEC; cnt++) {
             vos_mem_copy( &pAssocRsp->TSPECInfo[cnt], &ar.WMMTSPEC[cnt],
-                          sizeof(tDot11fIEWMMTSPEC));
+                          (sizeof(tDot11fIEWMMTSPEC)*ar.num_WMMTSPEC));
         }
         pAssocRsp->tspecPresent = TRUE;
     }
@@ -3922,7 +3914,7 @@ sirConvertAddtsReq2Struct(tpAniSirGlobal    pMac,
         if ( addts.num_WMMTCLAS )
         {
             j = (tANI_U8)(pAddTs->numTclas + addts.num_WMMTCLAS);
-            if ( SIR_MAC_TCLASIE_MAXNUM < j ) j = SIR_MAC_TCLASIE_MAXNUM;
+            if ( SIR_MAC_TCLASIE_MAXNUM > j ) j = SIR_MAC_TCLASIE_MAXNUM;
 
             for ( i = pAddTs->numTclas; i < j; ++i )
             {
@@ -4104,7 +4096,7 @@ sirConvertAddtsRsp2Struct(tpAniSirGlobal    pMac,
         if ( addts.num_WMMTCLAS )
         {
             j = (tANI_U8)(pAddTs->numTclas + addts.num_WMMTCLAS);
-            if ( SIR_MAC_TCLASIE_MAXNUM < j ) j = SIR_MAC_TCLASIE_MAXNUM;
+            if ( SIR_MAC_TCLASIE_MAXNUM > j ) j = SIR_MAC_TCLASIE_MAXNUM;
 
             for ( i = pAddTs->numTclas; i < j; ++i )
             {
