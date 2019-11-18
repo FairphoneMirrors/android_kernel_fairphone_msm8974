@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -43,8 +43,8 @@
 // Scan result hash related functions
 tANI_U8 limScanHashFunction(tSirMacAddr);
 void    limInitHashTable(tpAniSirGlobal);
-eHalStatus
-   limLookupNaddHashEntry(tpAniSirGlobal, tLimScanResultNode *, tANI_U8, tANI_U8, tANI_U32);
+eHalStatus    
+   limLookupNaddHashEntry(tpAniSirGlobal, tLimScanResultNode *, tANI_U8, tANI_U8);
 void    limDeleteHashEntry(tLimScanResultNode *);
 void    limDeleteCachedScanResults(tpAniSirGlobal);
 void    limRestorePreScanState(tpAniSirGlobal);
@@ -53,7 +53,7 @@ void    limReInitScanResults(tpAniSirGlobal);
 #ifdef WLAN_FEATURE_ROAM_SCAN_OFFLOAD
 void    limInitLfrHashTable(tpAniSirGlobal);
 eHalStatus
-   limLookupNaddLfrHashEntry(tpAniSirGlobal, tLimScanResultNode *, tANI_U8, tANI_U8, tANI_U32);
+   limLookupNaddLfrHashEntry(tpAniSirGlobal, tLimScanResultNode *, tANI_U8, tANI_U8);
 void    limDeleteLfrHashEntry(tLimScanResultNode *);
 void    limDeleteCachedLfrScanResults(tpAniSirGlobal);
 void    limReInitLfrScanResults(tpAniSirGlobal);

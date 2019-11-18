@@ -1552,6 +1552,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
 #endif
     int status;
     v_BOOL_t hddDisconInProgress = FALSE;
+    tANI_U16 reason_code;
 
     /* HDD has initiated disconnect, do not send connect result indication
      * to kernel as it will be handled by __cfg80211_disconnect.
@@ -1995,18 +1996,13 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
             }
             else
             {
-                if (pRoamInfo)
-                    cfg80211_connect_result ( dev, pRoamInfo->bssid,
-                        NULL, 0, NULL, 0,
-                        pRoamInfo->reasonCode ?
-                        pRoamInfo->reasonCode :
-                        WLAN_STATUS_UNSPECIFIED_FAILURE,
-                        GFP_KERNEL );
-                else
-                    cfg80211_connect_result ( dev, pWextState->req_bssId,
-                        NULL, 0, NULL, 0,
-                        WLAN_STATUS_UNSPECIFIED_FAILURE,
-                         GFP_KERNEL );
+                reason_code = WLAN_STATUS_UNSPECIFIED_FAILURE;
+
+                if (pRoamInfo && pRoamInfo->reasonCode)
+                    reason_code = (tANI_U16)pRoamInfo->reasonCode;
+
+                cfg80211_connect_result(dev, pWextState->req_bssId,
+                    NULL, 0, NULL, 0, reason_code, GFP_KERNEL);
             }
             /*Clear the roam profile*/
             hdd_clearRoamProfileIe( pAdapter );
@@ -2652,7 +2648,7 @@ static eHalStatus roamRoamConnectStatusUpdateHandler( hdd_adapter_t *pAdapter, t
       case eCSR_ROAM_RESULT_IBSS_NEW_PEER:
       {
          hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
-         struct station_info *staInfo;
+         struct station_info staInfo;
 
          pr_info ( "IBSS New Peer indication from SME "
                     "with peerMac " MAC_ADDRESS_STR " BSSID: " MAC_ADDRESS_STR " and stationID= %d",
@@ -2686,22 +2682,13 @@ static eHalStatus roamRoamConnectStatusUpdateHandler( hdd_adapter_t *pAdapter, t
                vosStatus, vosStatus );
          }
          pHddStaCtx->ibss_sta_generation++;
-
-         staInfo = vos_mem_malloc(sizeof(*staInfo));
-         if (staInfo == NULL) {
-             VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                       "memory allocation for station_info failed");
-             return eHAL_STATUS_FAILED_ALLOC;
-         }
-
-         memset(staInfo, 0, sizeof(*staInfo));
-         staInfo->filled = 0;
-         staInfo->generation = pHddStaCtx->ibss_sta_generation;
+         memset(&staInfo, 0, sizeof(staInfo));
+         staInfo.filled = 0;
+         staInfo.generation = pHddStaCtx->ibss_sta_generation;
 
          cfg80211_new_sta(pAdapter->dev,
                       (const u8 *)pRoamInfo->peerMac,
-                      staInfo, GFP_KERNEL);
-         vos_mem_free(staInfo);
+                      &staInfo, GFP_KERNEL);
 
          if ( eCSR_ENCRYPT_TYPE_WEP40_STATICKEY == pHddStaCtx->ibss_enc_key.encType
             ||eCSR_ENCRYPT_TYPE_WEP104_STATICKEY == pHddStaCtx->ibss_enc_key.encType
@@ -3384,8 +3371,7 @@ eHalStatus hdd_smeRoamCallback( void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U3
 
                 if((pHddCtx) &&
                    (TRUE == pHddCtx->hdd_wlan_suspended) &&
-                   ((eCSR_ROAM_RESULT_NONE == roamResult)||
-                     (pRoamInfo && pRoamInfo->is11rAssoc)))
+                   (eCSR_ROAM_RESULT_NONE == roamResult))
                 {
                     /* Send DTIM period to the FW; only if the wlan is already
                        in suspend. This is the case with roaming (reassoc),
@@ -3412,8 +3398,7 @@ eHalStatus hdd_smeRoamCallback( void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U3
                 if ((pHddCtx) &&
                     (FULL_POWER == pmcGetPmcState(pHddCtx->hHal)) &&
                     (VOS_TRUE == pHddStaCtx->hdd_ReassocScenario) &&
-                    ((eCSR_ROAM_RESULT_NONE == roamResult) ||
-                      (pRoamInfo && pRoamInfo->is11rAssoc)))
+                    (eCSR_ROAM_RESULT_NONE == roamResult))
                 {
                     hddLog( LOG1, FL("Device in full power."
                            "Stop and start traffic timer for roaming"));
@@ -3426,8 +3411,7 @@ eHalStatus hdd_smeRoamCallback( void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U3
                 }
 
                 halStatus = hdd_RoamSetKeyCompleteHandler( pAdapter, pRoamInfo, roamId, roamStatus, roamResult );
-                if ((eCSR_ROAM_RESULT_NONE == roamResult) ||
-                     (pRoamInfo && pRoamInfo->is11rAssoc))
+                if (eCSR_ROAM_RESULT_NONE == roamResult)
                     pHddStaCtx->hdd_ReassocScenario = FALSE;
             }
             break;
@@ -3711,6 +3695,7 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
     tDot11fIERSN dot11RSNIE;
     tDot11fIEWPA dot11WPAIE;
     tANI_U32 i;
+    tANI_U32 status;
     tANI_U8 *pRsnIe;
     tANI_U16 RSNIeLen;
     tPmkidCacheInfo PMKIDCache[4]; // Local transfer memory
@@ -3736,10 +3721,17 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
         pRsnIe = gen_ie + 2;
         RSNIeLen = gen_ie_len - 2;
         // Unpack the RSN IE
-        dot11fUnpackIeRSN((tpAniSirGlobal) halHandle,
+        status = dot11fUnpackIeRSN((tpAniSirGlobal) halHandle,
                             pRsnIe,
                             RSNIeLen,
                             &dot11RSNIE);
+        if (DOT11F_FAILED(status))
+        {
+            hddLog(LOGE,
+                       FL("Parse failure in hdd_ProcessGENIE (0x%08x)"),
+                       status);
+            return -EINVAL;
+        }
         // Copy out the encryption and authentication types
         hddLog(LOG1, FL("%s: pairwise cipher suite count: %d"),
                 __func__, dot11RSNIE.pwise_cipher_suite_count );
