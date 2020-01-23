@@ -34,7 +34,7 @@ static int befs_readdir(struct file *, void *, filldir_t);
 static int befs_get_block(struct inode *, sector_t, struct buffer_head *, int);
 static int befs_readpage(struct file *file, struct page *page);
 static sector_t befs_bmap(struct address_space *mapping, sector_t block);
-static struct dentry *befs_lookup(struct inode *, struct dentry *, struct nameidata *);
+static struct dentry *befs_lookup(struct inode *, struct dentry *, unsigned int);
 static struct inode *befs_iget(struct super_block *, unsigned long);
 static struct inode *befs_alloc_inode(struct super_block *sb);
 static void befs_destroy_inode(struct inode *inode);
@@ -159,7 +159,7 @@ befs_get_block(struct inode *inode, sector_t block,
 }
 
 static struct dentry *
-befs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
+befs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
 	struct inode *inode = NULL;
 	struct super_block *sb = dir->i_sb;
@@ -935,6 +935,7 @@ static struct file_system_type befs_fs_type = {
 	.kill_sb	= kill_block_super,
 	.fs_flags	= FS_REQUIRES_DEV,	
 };
+MODULE_ALIAS_FS("befs");
 
 static int __init
 init_befs_fs(void)

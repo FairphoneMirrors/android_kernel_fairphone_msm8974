@@ -210,7 +210,7 @@ out:
  * look up an entry in a directory
  */
 static struct dentry *romfs_lookup(struct inode *dir, struct dentry *dentry,
-				   struct nameidata *nd)
+				   unsigned int flags)
 {
 	unsigned long offset, maxoff;
 	struct inode *inode;
@@ -599,6 +599,7 @@ static struct file_system_type romfs_fs_type = {
 	.kill_sb	= romfs_kill_sb,
 	.fs_flags	= FS_REQUIRES_DEV,
 };
+MODULE_ALIAS_FS("romfs");
 
 /*
  * inode storage initialiser

@@ -558,6 +558,10 @@ ssize_t compat_rw_copy_check_uvector(int type,
 	}
 	*ret_pointer = iov;
 
+	ret = -EFAULT;
+	if (!access_ok(VERIFY_READ, uvector, nr_segs*sizeof(*uvector)))
+		goto out;
+
 	/*
 	 * Single unix specification:
 	 * We should -EINVAL if an element length is not >= 0 and fitting an
@@ -776,16 +780,16 @@ asmlinkage long compat_sys_mount(const char __user * dev_name,
 	char *kernel_type;
 	unsigned long data_page;
 	char *kernel_dev;
-	char *dir_page;
+	struct filename *dir;
 	int retval;
 
 	retval = copy_mount_string(type, &kernel_type);
 	if (retval < 0)
 		goto out;
 
-	dir_page = getname(dir_name);
-	retval = PTR_ERR(dir_page);
-	if (IS_ERR(dir_page))
+	dir = getname(dir_name);
+	retval = PTR_ERR(dir);
+	if (IS_ERR(dir))
 		goto out1;
 
 	retval = copy_mount_string(dev_name, &kernel_dev);
@@ -807,7 +811,7 @@ asmlinkage long compat_sys_mount(const char __user * dev_name,
 		}
 	}
 
-	retval = do_mount(kernel_dev, dir_page, kernel_type,
+	retval = do_mount(kernel_dev, dir->name, kernel_type,
 			flags, (void*)data_page);
 
  out4:
@@ -815,7 +819,7 @@ asmlinkage long compat_sys_mount(const char __user * dev_name,
  out3:
 	kfree(kernel_dev);
  out2:
-	putname(dir_page);
+	putname(dir);
  out1:
 	kfree(kernel_type);
  out:
@@ -1089,17 +1093,12 @@ static ssize_t compat_do_readv_writev(int type, struct file *file,
 	if (!file->f_op)
 		goto out;
 
-	ret = -EFAULT;
-	if (!access_ok(VERIFY_READ, uvector, nr_segs*sizeof(*uvector)))
-		goto out;
-
-	tot_len = compat_rw_copy_check_uvector(type, uvector, nr_segs,
+	ret = compat_rw_copy_check_uvector(type, uvector, nr_segs,
 					       UIO_FASTIOV, iovstack, &iov, 1);
-	if (tot_len == 0) {
-		ret = 0;
+	if (ret <= 0)
 		goto out;
-	}
 
+	tot_len = ret;
 	ret = rw_verify_area(type, file, pos, tot_len);
 	if (ret < 0)
 		goto out;

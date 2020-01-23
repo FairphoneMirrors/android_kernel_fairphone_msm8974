@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1324,7 +1324,7 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 {
 	int rc = 0;
 	if (!device) {
-		dprintk(VIDC_ERR, "Invalid params: %p\n", device);
+		dprintk(VIDC_ERR, "Invalid params: %pK\n", device);
 		return -EINVAL;
 	}
 
@@ -1398,7 +1398,8 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 	 * recursive lock in cmdq_write function, call nolock version
 	 * of alloc_ocmem
 	 */
-	WARN_ON(!mutex_is_locked(&device->write_lock));
+	WARN_ON(!mutex_is_locked(&device->write_lock)
+					&& (msm_vidc_debug & VIDC_INFO));
 	rc = __alloc_set_ocmem(device, false);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to allocate OCMEM");
@@ -1459,7 +1460,7 @@ static inline int venus_hfi_clk_gating_off(struct venus_hfi_device *device)
 {
 	int rc = 0;
 	if (!device) {
-		dprintk(VIDC_ERR, "Invalid params: %p\n", device);
+		dprintk(VIDC_ERR, "Invalid params: %pK\n", device);
 		return -EINVAL;
 	}
 	if (device->clk_state == ENABLED_PREPARED) {
@@ -3312,7 +3313,8 @@ static inline void venus_hfi_disable_unprepare_clks(
 		return;
 	}
 
-	WARN_ON(!mutex_is_locked(&device->clk_pwr_lock));
+	WARN_ON(!mutex_is_locked(&device->clk_pwr_lock)
+					&& (msm_vidc_debug & VIDC_INFO));
 	/*
 	* Make the clock state variable as unprepared before actually
 	* unpreparing clocks. This will make sure that when we check
@@ -3367,7 +3369,8 @@ static inline int venus_hfi_prepare_enable_clks(struct venus_hfi_device *device)
 		dprintk(VIDC_ERR, "Invalid params: %pK\n", device);
 		return -EINVAL;
 	}
-	WARN_ON(!mutex_is_locked(&device->clk_pwr_lock));
+	WARN_ON(!mutex_is_locked(&device->clk_pwr_lock)
+					&& (msm_vidc_debug & VIDC_INFO));
 
 	if (device->clk_state == ENABLED_PREPARED) {
 		dprintk(VIDC_DBG, "Clocks already prepared and enabled\n");
@@ -3636,7 +3639,7 @@ static int protect_cp_mem(struct venus_hfi_device *device)
 
 	iommu_group_set = &device->res->iommu_group_set;
 	if (!iommu_group_set) {
-		dprintk(VIDC_ERR, "invalid params: %p\n", iommu_group_set);
+		dprintk(VIDC_ERR, "invalid params: %pK\n", iommu_group_set);
 		return -EINVAL;
 	}
 
@@ -3800,7 +3803,7 @@ static int venus_hfi_get_fw_info(void *dev, struct hal_fw_info *fw_info)
 
 	if (!device|| !fw_info) {
 		dprintk(VIDC_ERR,
-			 "%s Invalid paramter: device = %pK fw_info = %p\n",
+			 "%s Invalid paramter: device = %pK fw_info = %pK\n",
 			__func__, device, fw_info);
 		return -EINVAL;
 	}

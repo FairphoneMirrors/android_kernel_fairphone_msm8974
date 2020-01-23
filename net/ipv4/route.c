@@ -741,7 +741,6 @@ static inline int compare_keys(struct rtable *rt1, struct rtable *rt2)
 		(rt1->rt_mark ^ rt2->rt_mark) |
 		(rt1->rt_key_tos ^ rt2->rt_key_tos) |
 		(rt1->rt_route_iif ^ rt2->rt_route_iif) |
-		(rt1->rt_uid ^ rt2->rt_uid) |
 		(rt1->rt_oif ^ rt2->rt_oif)) == 0;
 }
 
@@ -1882,7 +1881,6 @@ void ip_rt_get_source(u8 *addr, struct sk_buff *skb, struct rtable *rt)
 		fl4.flowi4_oif = rt->dst.dev->ifindex;
 		fl4.flowi4_iif = skb->dev->ifindex;
 		fl4.flowi4_mark = skb->mark;
-		fl4.flowi4_uid = skb->sk ? sock_i_uid(skb->sk) : 0;
 
 		rcu_read_lock();
 		if (fib_lookup(dev_net(rt->dst.dev), &fl4, &res) == 0)
@@ -2066,7 +2064,6 @@ static int ip_route_input_mc(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	rth->rt_iif	= dev->ifindex;
 	rth->rt_oif	= 0;
 	rth->rt_mark    = skb->mark;
-	rth->rt_uid	= 0;
 	rth->rt_gateway	= daddr;
 	rth->rt_spec_dst= spec_dst;
 	rth->rt_peer_genid = 0;
@@ -2157,9 +2154,10 @@ static int __mkroute_input(struct sk_buff *skb,
 		flags |= RTCF_DIRECTSRC;
 
 	if (out_dev == in_dev && err &&
+	    skb->protocol == htons(ETH_P_IP) &&
 	    (IN_DEV_SHARED_MEDIA(out_dev) ||
 	     inet_addr_onlink(out_dev, saddr, FIB_RES_GW(*res))))
-		flags |= RTCF_DOREDIRECT;
+		IPCB(skb)->flags |= IPSKB_DOREDIRECT;
 
 	if (skb->protocol != htons(ETH_P_IP)) {
 		/* Not IP (i.e. ARP). Do not create route, if it is
@@ -2196,7 +2194,6 @@ static int __mkroute_input(struct sk_buff *skb,
 	rth->rt_iif 	= in_dev->dev->ifindex;
 	rth->rt_oif 	= 0;
 	rth->rt_mark    = skb->mark;
-	rth->rt_uid	= 0;
 	rth->rt_gateway	= daddr;
 	rth->rt_spec_dst= spec_dst;
 	rth->rt_peer_genid = 0;
@@ -2380,7 +2377,6 @@ local_input:
 	rth->rt_iif	= dev->ifindex;
 	rth->rt_oif	= 0;
 	rth->rt_mark    = skb->mark;
-	rth->rt_uid	= 0;
 	rth->rt_gateway	= daddr;
 	rth->rt_spec_dst= spec_dst;
 	rth->rt_peer_genid = 0;
@@ -2585,7 +2581,6 @@ static struct rtable *__mkroute_output(const struct fib_result *res,
 	rth->rt_iif	= orig_oif ? : dev_out->ifindex;
 	rth->rt_oif	= orig_oif;
 	rth->rt_mark    = fl4->flowi4_mark;
-	rth->rt_uid	= fl4->flowi4_uid;
 	rth->rt_gateway = fl4->daddr;
 	rth->rt_spec_dst= fl4->saddr;
 	rth->rt_peer_genid = 0;
@@ -2837,7 +2832,6 @@ struct rtable *__ip_route_output_key(struct net *net, struct flowi4 *flp4)
 		    rt_is_output_route(rth) &&
 		    rth->rt_oif == flp4->flowi4_oif &&
 		    rth->rt_mark == flp4->flowi4_mark &&
-		    rth->rt_uid == flp4->flowi4_uid &&
 		    !((rth->rt_key_tos ^ flp4->flowi4_tos) &
 			    (IPTOS_RT_MASK | RTO_ONLINK)) &&
 		    net_eq(dev_net(rth->dst.dev), net) &&
@@ -2919,7 +2913,6 @@ struct dst_entry *ipv4_blackhole_route(struct net *net, struct dst_entry *dst_or
 		rt->rt_iif = ort->rt_iif;
 		rt->rt_oif = ort->rt_oif;
 		rt->rt_mark = ort->rt_mark;
-		rt->rt_uid = ort->rt_uid;
 
 		rt->rt_genid = rt_genid(net);
 		rt->rt_flags = ort->rt_flags;
@@ -2960,7 +2953,7 @@ struct rtable *ip_route_output_flow(struct net *net, struct flowi4 *flp4,
 }
 EXPORT_SYMBOL_GPL(ip_route_output_flow);
 
-static int rt_fill_info(struct net *net,
+static int rt_fill_info(struct net *net, struct flowi4 *fl4,
 			struct sk_buff *skb, u32 pid, u32 seq, int event,
 			int nowait, unsigned int flags)
 {
@@ -2988,6 +2981,8 @@ static int rt_fill_info(struct net *net,
 	r->rtm_flags	= (rt->rt_flags & ~0xFFFF) | RTM_F_CLONED;
 	if (rt->rt_flags & RTCF_NOTIFY)
 		r->rtm_flags |= RTM_F_NOTIFY;
+	if (IPCB(skb)->flags & IPSKB_DOREDIRECT)
+		r->rtm_flags |= RTCF_DOREDIRECT;
 
 	NLA_PUT_BE32(skb, RTA_DST, rt->rt_dst);
 
@@ -3015,8 +3010,10 @@ static int rt_fill_info(struct net *net,
 	if (rt->rt_mark)
 		NLA_PUT_BE32(skb, RTA_MARK, rt->rt_mark);
 
-	if (rt->rt_uid != (uid_t) -1)
-		NLA_PUT_BE32(skb, RTA_UID, rt->rt_uid);
+	if (!uid_eq(fl4->flowi4_uid, INVALID_UID) &&
+	    nla_put_u32(skb, RTA_UID,
+			from_kuid_munged(current_user_ns(), fl4->flowi4_uid)))
+		goto nla_put_failure;
 
 	error = rt->dst.error;
 	if (peer) {
@@ -3077,12 +3074,14 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void 
 	struct rtmsg *rtm;
 	struct nlattr *tb[RTA_MAX+1];
 	struct rtable *rt = NULL;
+	struct flowi4 fl4;
 	__be32 dst = 0;
 	__be32 src = 0;
 	u32 iif;
 	int err;
 	int mark;
 	struct sk_buff *skb;
+	kuid_t uid;
 
 	err = nlmsg_parse(nlh, sizeof(*rtm), tb, RTA_MAX, rtm_ipv4_policy);
 	if (err < 0)
@@ -3110,6 +3109,18 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void 
 	dst = tb[RTA_DST] ? nla_get_be32(tb[RTA_DST]) : 0;
 	iif = tb[RTA_IIF] ? nla_get_u32(tb[RTA_IIF]) : 0;
 	mark = tb[RTA_MARK] ? nla_get_u32(tb[RTA_MARK]) : 0;
+	if (tb[RTA_UID])
+		uid = make_kuid(current_user_ns(), nla_get_u32(tb[RTA_UID]));
+	else
+		uid = (iif ? INVALID_UID : current_uid());
+
+	memset(&fl4, 0, sizeof(fl4));
+	fl4.daddr = dst;
+	fl4.saddr = src;
+	fl4.flowi4_tos = rtm->rtm_tos;
+	fl4.flowi4_oif = tb[RTA_OIF] ? nla_get_u32(tb[RTA_OIF]) : 0;
+	fl4.flowi4_mark = mark;
+	fl4.flowi4_uid = uid;
 
 	if (iif) {
 		struct net_device *dev;
@@ -3131,14 +3142,6 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void 
 		if (err == 0 && rt->dst.error)
 			err = -rt->dst.error;
 	} else {
-		struct flowi4 fl4 = {
-			.daddr = dst,
-			.saddr = src,
-			.flowi4_tos = rtm->rtm_tos,
-			.flowi4_oif = tb[RTA_OIF] ? nla_get_u32(tb[RTA_OIF]) : 0,
-			.flowi4_mark = mark,
-			.flowi4_uid = tb[RTA_UID] ? nla_get_u32(tb[RTA_UID]) : current_uid(),
-		};
 		rt = ip_route_output_key(net, &fl4);
 
 		err = 0;
@@ -3153,7 +3156,7 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void 
 	if (rtm->rtm_flags & RTM_F_NOTIFY)
 		rt->rt_flags |= RTCF_NOTIFY;
 
-	err = rt_fill_info(net, skb, NETLINK_CB(in_skb).pid, nlh->nlmsg_seq,
+	err = rt_fill_info(net, &fl4, skb, NETLINK_CB(in_skb).pid, nlh->nlmsg_seq,
 			   RTM_NEWROUTE, 0, 0);
 	if (err <= 0)
 		goto errout_free;
@@ -3191,8 +3194,8 @@ int ip_rt_dump(struct sk_buff *skb,  struct netlink_callback *cb)
 			if (rt_is_expired(rt))
 				continue;
 			skb_dst_set_noref(skb, &rt->dst);
-			if (rt_fill_info(net, skb, NETLINK_CB(cb->skb).pid,
-					 cb->nlh->nlmsg_seq, RTM_NEWROUTE,
+			if (rt_fill_info(net, &(inet_sk(skb->sk))->cork.fl.u.ip4, skb,
+					 NETLINK_CB(cb->skb).pid, cb->nlh->nlmsg_seq, RTM_NEWROUTE,
 					 1, NLM_F_MULTI) <= 0) {
 				skb_dst_drop(skb);
 				rcu_read_unlock_bh();

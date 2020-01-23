@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2017, The Linux Foundation. All rights reserved.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -406,6 +406,8 @@ done:
 	mutex_unlock(&prtd->lock);
 	prtd->prepared--;
 	kfree(prtd);
+	runtime->private_data = NULL;
+
 	return 0;
 }
 static int msm_afe_prepare(struct snd_pcm_substream *substream)
@@ -505,7 +507,7 @@ static int msm_afe_hw_params(struct snd_pcm_substream *substream,
 		return -ENOMEM;
 	}
 
-	pr_debug("%s:buf = %p\n", __func__, buf);
+	pr_debug("%s:buf = %pK\n", __func__, buf);
 	dma_buf->dev.type = SNDRV_DMA_TYPE_DEV;
 	dma_buf->dev.dev = substream->pcm->card->dev;
 	dma_buf->private_data = NULL;

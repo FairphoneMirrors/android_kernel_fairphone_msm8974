@@ -157,8 +157,7 @@ static const struct nla_policy nl80211_policy[NL80211_ATTR_MAX+1] = {
 	[NL80211_ATTR_WPA_VERSIONS] = { .type = NLA_U32 },
 	[NL80211_ATTR_PID] = { .type = NLA_U32 },
 	[NL80211_ATTR_4ADDR] = { .type = NLA_U8 },
-	[NL80211_ATTR_PMKID] = { .type = NLA_BINARY,
-				 .len = WLAN_PMKID_LEN },
+	[NL80211_ATTR_PMKID] = { .len = WLAN_PMKID_LEN },
 	[NL80211_ATTR_DURATION] = { .type = NLA_U32 },
 	[NL80211_ATTR_COOKIE] = { .type = NLA_U64 },
 	[NL80211_ATTR_TX_RATES] = { .type = NLA_NESTED },
@@ -210,6 +209,7 @@ static const struct nla_policy nl80211_policy[NL80211_ATTR_MAX+1] = {
 	[NL80211_ATTR_USER_REG_HINT_TYPE] = { .type = NLA_U32 },
 	[NL80211_ATTR_SAE_DATA] = { .type = NLA_BINARY, },
 	[NL80211_ATTR_VHT_CAPABILITY] = { .len = NL80211_VHT_CAPABILITY_LEN },
+	[NL80211_ATTR_LOCAL_MESH_POWER_MODE] = {. type = NLA_U32 },
 	[NL80211_ATTR_ACL_POLICY] = {. type = NLA_U32 },
 	[NL80211_ATTR_MAC_ADDRS] = { .type = NLA_NESTED },
 	[NL80211_ATTR_STA_CAPABILITY] = { .type = NLA_U16 },
@@ -1582,6 +1582,7 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 pid, u32 seq, int flags,
 	NLA_PUT_U32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx);
 	NLA_PUT_STRING(msg, NL80211_ATTR_IFNAME, dev->name);
 	NLA_PUT_U32(msg, NL80211_ATTR_IFTYPE, dev->ieee80211_ptr->iftype);
+	NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, dev->dev_addr);
 
 	NLA_PUT_U32(msg, NL80211_ATTR_GENERATION,
 		    rdev->devlist_generation ^
@@ -2554,7 +2555,8 @@ static bool nl80211_put_sta_rate(struct sk_buff *msg, struct rate_info *info,
 				 int attr)
 {
 	struct nlattr *rate;
-	u16 bitrate;
+	u32 bitrate;
+	u16 bitrate_compat;
 
 	rate = nla_nest_start(msg, attr);
 	if (!rate)
@@ -2562,8 +2564,14 @@ static bool nl80211_put_sta_rate(struct sk_buff *msg, struct rate_info *info,
 
 	/* cfg80211_calculate_bitrate will return 0 for mcs >= 32 */
 	bitrate = cfg80211_calculate_bitrate(info);
-	if (bitrate > 0)
-		nla_put_u16(msg, NL80211_RATE_INFO_BITRATE, bitrate);
+	/* report 16-bit bitrate only if we can */
+	bitrate_compat = bitrate < (1UL << 16) ? bitrate : 0;
+	if (bitrate > 0 &&
+	    nla_put_u32(msg, NL80211_RATE_INFO_BITRATE32, bitrate))
+		return false;
+	if (bitrate_compat > 0 &&
+	    nla_put_u16(msg, NL80211_RATE_INFO_BITRATE, bitrate_compat))
+		return false;
 
 	if (info->flags & RATE_INFO_FLAGS_MCS) {
 		if (nla_put_u8(msg, NL80211_RATE_INFO_MCS, info->mcs))

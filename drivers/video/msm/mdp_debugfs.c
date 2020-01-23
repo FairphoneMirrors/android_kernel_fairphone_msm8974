@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2012, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -82,11 +82,11 @@ static ssize_t mdp_offset_write(
 	debug_buf[count] = 0;	/* end of string */
 
          if (sscanf(debug_buf, "%x %d", &off, &cnt) != 2)
-                return ­EFAULT;
+                return ­-EFAULT;
 	if (cnt <= 0)
 		cnt = 1;
 
-        if ((off > MDP_MAX_OFFSET) || (cnt > (MDP_MAX_OFFSET ­ off))) {
+        if ((off > MDP_MAX_OFFSET) || (cnt > (MDP_MAX_OFFSET - off))) {
                printk(KERN_INFO "%s: Invalid offset%x+cnt%d > %x\n", __func__,
                               off, cnt, MDP_MAX_OFFSET);
                return -EFAULT;
@@ -922,18 +922,18 @@ static ssize_t dbg_offset_write(
 	debug_buf[count] = 0;	/* end of string */
 
 	cnt = sscanf(debug_buf, "%x %d %x", &off, &num, &base);
-        if (cnt != 3)
-                return -EFAULT;
-        if ((off > MDP_MAX_OFFSET) || (num > (MDP_MAX_OFFSET ­ off))) {
-                 printk(KERN_INFO "%s: Invalid offset%x+num%d > %x\n", __func__,
-                                off, num, MDP_MAX_OFFSET);
-                 return -EFAULT;
-         }
-         dbg_offset = off;
-         dbg_count = num;
-         dbg_base = (char *)base;
+	if (cnt != 3)
+		return -EFAULT;
+	if ((off > MDP_MAX_OFFSET) || (num > (MDP_MAX_OFFSET ­- off))) {
+		printk(KERN_INFO "%s: Invalid offset%x+num%d > %x\n", __func__,
+				off, num, MDP_MAX_OFFSET);
+		return -EFAULT;
+	}
+	dbg_offset = off;
+	dbg_count = num;
+	dbg_base = (char *)base;
 	printk(KERN_INFO "%s: offset=%x cnt=%d base=%x\n", __func__,
-				dbg_offset, dbg_count, (int)dbg_base);
+			dbg_offset, dbg_count, (int)dbg_base);
 
 	return count;
 }
@@ -1242,7 +1242,7 @@ static ssize_t hdmi_offset_write(
 
         if (cnt != 2)
               return -EFAULT;
-        if ((off > HDMI_MAX_OFFSET) || (num > (HDMI_MAX_OFFSET ­ off))) {
+        if ((off > HDMI_MAX_OFFSET) || (num > (HDMI_MAX_OFFSET ­- off))) {
               printk(KERN_INFO "%s: Invalid offset%x+num%d > %x\n", __func__,
                              off, num, HDMI_MAX_OFFSET);
                return -EFAULT;
@@ -1428,7 +1428,7 @@ int mdp_debugfs_init(void)
 	}
 
 #ifdef CONFIG_FB_MSM_MDP40
-	if (debugfs_create_file("stat", 0600, dent, 0, &mdp_stat_fops)
+	if (debugfs_create_file("stat", 0644, dent, 0, &mdp_stat_fops)
 			== NULL) {
 		printk(KERN_ERR "%s(%d): debugfs_create_file: debug fail\n",
 			__FILE__, __LINE__);
@@ -1436,7 +1436,7 @@ int mdp_debugfs_init(void)
 	}
 #endif
 
-	if (debugfs_create_file("force_ov0_blt", 0600, dent, 0,
+	if (debugfs_create_file("force_ov0_blt", 0644, dent, 0,
 				&dbg_force_ov0_blt_fops)
 			== NULL) {
 		pr_err("%s(%d): debugfs_create_file: debug fail\n",
@@ -1444,7 +1444,7 @@ int mdp_debugfs_init(void)
 		return -EFAULT;
 	}
 
-	if (debugfs_create_file("force_ov1_blt", 0600, dent, 0,
+	if (debugfs_create_file("force_ov1_blt", 0644, dent, 0,
 				&dbg_force_ov1_blt_fops)
 			== NULL) {
 		pr_err("%s(%d): debugfs_create_file: debug fail\n",

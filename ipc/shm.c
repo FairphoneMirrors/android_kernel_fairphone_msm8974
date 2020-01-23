@@ -479,10 +479,12 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 
 	sprintf (name, "SYSV%08x", key);
 	if (shmflg & SHM_HUGETLB) {
+		size_t hugesize = ALIGN(size, huge_page_size(&default_hstate));
+
 		/* hugetlb_file_setup applies strict accounting */
 		if (shmflg & SHM_NORESERVE)
 			acctflag = VM_NORESERVE;
-		file = hugetlb_file_setup(name, 0, size, acctflag,
+		file = hugetlb_file_setup(name, hugesize, acctflag,
 					&shp->mlock_user, HUGETLB_SHMFS_INODE);
 	} else {
 		/*
@@ -962,8 +964,13 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg, ulong *raddr)
 		goto out;
 	else if ((addr = (ulong)shmaddr)) {
 		if (addr & (SHMLBA-1)) {
-			if (shmflg & SHM_RND)
-				addr &= ~(SHMLBA-1);	   /* round down */
+			/*
+			 * Round down to the nearest multiple of shmlba.
+			 * For sane do_mmap_pgoff() parameters, avoid
+			 * round downs that trigger nil-page and MAP_FIXED.
+			 */
+			if ((shmflg & SHM_RND) && addr >= SHMLBA)
+				addr &= ~(SHMLBA - 1);
 			else
 #ifndef __ARCH_FORCE_SHMLBA
 				if (addr & ~PAGE_MASK)

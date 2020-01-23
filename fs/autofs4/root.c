@@ -32,7 +32,7 @@ static long autofs4_root_ioctl(struct file *,unsigned int,unsigned long);
 static long autofs4_root_compat_ioctl(struct file *,unsigned int,unsigned long);
 #endif
 static int autofs4_dir_open(struct inode *inode, struct file *file);
-static struct dentry *autofs4_lookup(struct inode *,struct dentry *, struct nameidata *);
+static struct dentry *autofs4_lookup(struct inode *,struct dentry *, unsigned int);
 static struct vfsmount *autofs4_d_automount(struct path *);
 static int autofs4_d_manage(struct dentry *, bool);
 static void autofs4_dentry_release(struct dentry *);
@@ -458,7 +458,7 @@ int autofs4_d_manage(struct dentry *dentry, bool rcu_walk)
 }
 
 /* Lookups in the root directory */
-static struct dentry *autofs4_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
+static struct dentry *autofs4_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
 	struct autofs_sb_info *sbi;
 	struct autofs_info *ino;
@@ -507,7 +507,7 @@ static struct dentry *autofs4_lookup(struct inode *dir, struct dentry *dentry, s
 	return NULL;
 }
 
-static int autofs4_dir_symlink(struct inode *dir, 
+static int autofs4_dir_symlink(struct inode *dir,
 			       struct dentry *dentry,
 			       const char *symname)
 {
@@ -578,7 +578,7 @@ static int autofs4_dir_unlink(struct inode *dir, struct dentry *dentry)
 	struct autofs_sb_info *sbi = autofs4_sbi(dir->i_sb);
 	struct autofs_info *ino = autofs4_dentry_ino(dentry);
 	struct autofs_info *p_ino;
-	
+
 	/* This allows root to remove symlinks */
 	if (!autofs4_oz_mode(sbi) && !capable(CAP_SYS_ADMIN))
 		return -EACCES;
@@ -649,7 +649,7 @@ static void autofs_clear_leaf_automount_flags(struct dentry *dentry)
 	/* only consider parents below dentrys in the root */
 	if (IS_ROOT(parent->d_parent))
 		return;
-	d_child = &dentry->d_u.d_child;
+	d_child = &dentry->d_child;
 	/* Set parent managed if it's becoming empty */
 	if (d_child->next == &parent->d_subdirs &&
 	    d_child->prev == &parent->d_subdirs)
@@ -662,7 +662,7 @@ static int autofs4_dir_rmdir(struct inode *dir, struct dentry *dentry)
 	struct autofs_sb_info *sbi = autofs4_sbi(dir->i_sb);
 	struct autofs_info *ino = autofs4_dentry_ino(dentry);
 	struct autofs_info *p_ino;
-	
+
 	DPRINTK("dentry %p, removing %.*s",
 		dentry, dentry->d_name.len, dentry->d_name.name);
 
@@ -832,10 +832,10 @@ static int autofs4_root_ioctl_unlocked(struct inode *inode, struct file *filp,
 	if (_IOC_TYPE(cmd) != _IOC_TYPE(AUTOFS_IOC_FIRST) ||
 	     _IOC_NR(cmd) - _IOC_NR(AUTOFS_IOC_FIRST) >= AUTOFS_IOC_COUNT)
 		return -ENOTTY;
-	
+
 	if (!autofs4_oz_mode(sbi) && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
-	
+
 	switch(cmd) {
 	case AUTOFS_IOC_READY:	/* Wait queue: go ahead and retry */
 		return autofs4_wait_release(sbi,(autofs_wqt_t)arg,0);

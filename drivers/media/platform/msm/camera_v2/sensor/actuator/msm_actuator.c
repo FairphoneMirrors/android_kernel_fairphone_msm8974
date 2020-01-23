@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -85,6 +85,11 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 
 	if (a_ctrl == NULL) {
 		pr_err("failed. actuator ctrl is NULL");
+		return;
+	}
+
+	if (a_ctrl->i2c_reg_tbl == NULL) {
+		pr_err("failed. i2c reg tabl is NULL");
 		return;
 	}
 
@@ -263,6 +268,12 @@ static int32_t msm_actuator_piezo_move_focus(
 		return -EFAULT;
 	}
 
+	if (dest_step_position > a_ctrl->total_steps) {
+		pr_err("Step pos greater than total steps = %d\n",
+			dest_step_position);
+		return -EFAULT;
+	}
+
 	a_ctrl->i2c_tbl_index = 0;
 	a_ctrl->func_tbl->actuator_parse_i2c_params(a_ctrl,
 		(num_steps *
@@ -411,7 +422,7 @@ static int32_t msm_actuator_init_step_table(struct msm_actuator_ctrl_t *a_ctrl,
 
 	/* free the step_position_table to allocate a new one */
 	kfree(a_ctrl->step_position_table);
-       
+
          a_ctrl->step_position_table = NULL;
 
 	if (set_info->af_tuning_params.total_steps
@@ -631,9 +642,11 @@ static int32_t msm_actuator_init(struct msm_actuator_ctrl_t *a_ctrl,
 
 	if (copy_from_user(&a_ctrl->region_params,
 		(void *)set_info->af_tuning_params.region_params,
-		a_ctrl->region_size * sizeof(struct region_params_t)))
+		a_ctrl->region_size * sizeof(struct region_params_t))) {
+		a_ctrl->total_steps = 0;
+		pr_err("Error copying region_params\n");
 		return -EFAULT;
-
+	}
 	if (a_ctrl->act_device_type == MSM_CAMERA_PLATFORM_DEVICE) {
 		cci_client = a_ctrl->i2c_client.cci_client;
 		cci_client->sid =
@@ -729,7 +742,7 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 {
 	struct msm_actuator_cfg_data *cdata =
 		(struct msm_actuator_cfg_data *)argp;
-	int32_t rc = 0;
+	int32_t rc = -EINVAL;
 	mutex_lock(a_ctrl->actuator_mutex);
 	CDBG("Enter\n");
 	CDBG("%s type %d\n", __func__, cdata->cfgtype);
@@ -746,22 +759,32 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		break;
 
 	case CFG_SET_DEFAULT_FOCUS:
-		rc = a_ctrl->func_tbl->actuator_set_default_focus(a_ctrl,
-			&cdata->cfg.move);
+		if (a_ctrl->func_tbl &&
+				a_ctrl->func_tbl->actuator_set_default_focus)
+			rc = a_ctrl->func_tbl->actuator_set_default_focus(a_ctrl,
+					&cdata->cfg.move);
+
+
 		if (rc < 0)
 			pr_err("move focus failed %d\n", rc);
 		break;
 
 	case CFG_MOVE_FOCUS:
-		rc = a_ctrl->func_tbl->actuator_move_focus(a_ctrl,
-			&cdata->cfg.move);
+		if (a_ctrl->func_tbl &&
+				a_ctrl->func_tbl->actuator_move_focus)
+			rc = a_ctrl->func_tbl->actuator_move_focus(a_ctrl,
+					&cdata->cfg.move);
+
 		if (rc < 0)
 			pr_err("move focus failed %d\n", rc);
 		break;
 
 	case CFG_SET_POSITION:
-		rc = a_ctrl->func_tbl->actuator_set_position(a_ctrl,
-			&cdata->cfg.setpos);
+		if (a_ctrl->func_tbl &&
+				a_ctrl->func_tbl->actuator_set_position)
+			rc = a_ctrl->func_tbl->actuator_set_position(a_ctrl,
+					&cdata->cfg.setpos);
+
 		if (rc < 0)
 			pr_err("actuator_set_position failed %d\n", rc);
 		break;
@@ -874,7 +897,7 @@ static long msm_actuator_subdev_ioctl(struct v4l2_subdev *sd,
 	struct msm_actuator_ctrl_t *a_ctrl = v4l2_get_subdevdata(sd);
 	void __user *argp = (void __user *)arg;
 	CDBG("Enter\n");
-	CDBG("%s:%d a_ctrl %p argp %p\n", __func__, __LINE__, a_ctrl, argp);
+	CDBG("%s:%d a_ctrl %pK argp %pK\n", __func__, __LINE__, a_ctrl, argp);
 	switch (cmd) {
 	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:
 		return msm_actuator_get_subdev_id(a_ctrl, argp);

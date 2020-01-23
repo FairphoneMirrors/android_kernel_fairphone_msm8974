@@ -132,7 +132,7 @@ affs_fix_dcache(struct dentry *dentry, u32 entry_ino)
 	head = &inode->i_dentry;
 	next = head->next;
 	while (next != head) {
-		dentry = list_entry(next, struct dentry, d_alias);
+		dentry = list_entry(next, struct dentry, d_u.d_alias);
 		if (entry_ino == (u32)(long)dentry->d_fsdata) {
 			dentry->d_fsdata = data;
 			break;
@@ -164,7 +164,7 @@ affs_remove_link(struct dentry *dentry)
 	if (inode->i_ino == link_ino) {
 		/* we can't remove the head of the link, as its blocknr is still used as ino,
 		 * so we remove the block of the first link instead.
-		 */ 
+		 */
 		link_ino = be32_to_cpu(AFFS_TAIL(sb, bh)->link_chain);
 		link_bh = affs_bread(sb, link_ino);
 		if (!link_bh)

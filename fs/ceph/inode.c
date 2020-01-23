@@ -600,7 +600,7 @@ static int fill_inode(struct inode *inode,
 	if (le64_to_cpu(info->version) > 0 &&
 	    (ci->i_version & ~1) >= le64_to_cpu(info->version))
 		goto no_change;
-	
+
 	updating_inode = 1;
 	issued = __ceph_caps_issued(ci, &implemented);
 	issued |= implemented | __ceph_caps_dirty(ci);
@@ -869,9 +869,9 @@ static void ceph_set_dentry_offset(struct dentry *dn)
 
 	spin_lock(&dir->d_lock);
 	spin_lock_nested(&dn->d_lock, DENTRY_D_LOCK_NESTED);
-	list_move(&dn->d_u.d_child, &dir->d_subdirs);
+	list_move(&dn->d_child, &dir->d_subdirs);
 	dout("set_dentry_offset %p %lld (%p %p)\n", dn, di->offset,
-	     dn->d_u.d_child.prev, dn->d_u.d_child.next);
+		dn->d_child.prev, dn->d_child.next);
 	spin_unlock(&dn->d_lock);
 	spin_unlock(&dir->d_lock);
 }
@@ -1063,7 +1063,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			 * D_COMPLETE.
 			 */
 			ceph_set_dentry_offset(req->r_old_dentry);
-			dout("dn %p gets new offset %lld\n", req->r_old_dentry, 
+			dout("dn %p gets new offset %lld\n", req->r_old_dentry,
 			     ceph_dentry(req->r_old_dentry)->offset);
 
 			dn = req->r_old_dentry;  /* use old_dentry */
@@ -1257,7 +1257,7 @@ retry_lookup:
 			/* reorder parent's d_subdirs */
 			spin_lock(&parent->d_lock);
 			spin_lock_nested(&dn->d_lock, DENTRY_D_LOCK_NESTED);
-			list_move(&dn->d_u.d_child, &parent->d_subdirs);
+			list_move(&dn->d_child, &parent->d_subdirs);
 			spin_unlock(&dn->d_lock);
 			spin_unlock(&parent->d_lock);
 		}

@@ -68,6 +68,7 @@
 #include <linux/capability.h>
 #include <linux/fs_struct.h>
 #include <linux/uaccess.h>
+#include <linux/compat.h>
 
 #include "audit.h"
 
@@ -107,27 +108,29 @@ struct audit_cap_data {
  * we don't let putname() free it (instead we free all of the saved
  * pointers at syscall exit time).
  *
- * Further, in fs/namei.c:path_lookup() we store the inode and device. */
+ * Further, in fs/namei.c:path_lookup() we store the inode and device.
+ */
 struct audit_names {
-	struct list_head list;		/* audit_context->names_list */
-	const char	*name;
-	unsigned long	ino;
-	dev_t		dev;
-	umode_t		mode;
-	uid_t		uid;
-	gid_t		gid;
-	dev_t		rdev;
-	u32		osid;
-	struct audit_cap_data fcap;
-	unsigned int	fcap_ver;
-	int		name_len;	/* number of name's characters to log */
-	bool		name_put;	/* call __putname() for this name */
+	struct list_head	list;		/* audit_context->names_list */
+	struct filename	*name;
+	unsigned long		ino;
+	dev_t			dev;
+	umode_t			mode;
+	uid_t			uid;
+	gid_t			gid;
+	dev_t			rdev;
+	u32			osid;
+	struct audit_cap_data	 fcap;
+	unsigned int		fcap_ver;
+	int			name_len;	/* number of name's characters to log */
+	unsigned char		type;		/* record type */
+	bool			name_put;	/* call __putname() for this name */
 	/*
 	 * This was an allocated audit_names and not from the array of
 	 * names allocated in the task audit context.  Thus this name
 	 * should be freed on syscall exit
 	 */
-	bool		should_free;
+	bool			should_free;
 };
 
 struct audit_aux_data {
@@ -1007,7 +1010,7 @@ static inline void audit_free_names(struct audit_context *context)
 		       context->ino_count);
 		list_for_each_entry(n, &context->names_list, list) {
 			printk(KERN_ERR "names[%d] = %p = %s\n", i,
-			       n->name, n->name ?: "(null)");
+			       n->name, n->name->name ?: "(null)");
 		}
 		dump_stack();
 		return;
@@ -1532,7 +1535,7 @@ static void audit_log_name(struct audit_context *context, struct audit_names *n,
 		case AUDIT_NAME_FULL:
 			/* log the full path */
 			audit_log_format(ab, " name=");
-			audit_log_untrustedstring(ab, n->name);
+			audit_log_untrustedstring(ab, n->name->name);
 			break;
 		case 0:
 			/* name was specified as a relative path and the
@@ -1542,7 +1545,7 @@ static void audit_log_name(struct audit_context *context, struct audit_names *n,
 		default:
 			/* log the name's directory component */
 			audit_log_format(ab, " name=");
-			audit_log_n_untrustedstring(ab, n->name,
+			audit_log_n_untrustedstring(ab, n->name->name,
 						    n->name_len);
 		}
 	} else
@@ -2036,7 +2039,7 @@ static struct audit_names *audit_alloc_name(struct audit_context *context)
  * Add a name to the list of audit names for this context.
  * Called from fs/namei.c:getname().
  */
-void __audit_getname(const char *name)
+void __audit_getname(struct filename *name)
 {
 	struct audit_context *context = current->audit_context;
 	struct audit_names *n;
@@ -2049,6 +2052,11 @@ void __audit_getname(const char *name)
 #endif
 		return;
 	}
+
+#if AUDIT_DEBUG
+	/* The filename _must_ have a populated ->name */
+	BUG_ON(!name->name);
+#endif
 
 	n = audit_alloc_name(context);
 	if (!n)
@@ -2069,7 +2077,7 @@ void __audit_getname(const char *name)
  * then we delay the putname until syscall exit.
  * Called from include/linux/fs.h:putname().
  */
-void audit_putname(const char *name)
+void audit_putname(struct filename *name)
 {
 	struct audit_context *context = current->audit_context;
 
@@ -2084,7 +2092,7 @@ void audit_putname(const char *name)
 
 			list_for_each_entry(n, &context->names_list, list)
 				printk(KERN_ERR "name[%d] = %p = %s\n", i,
-				       n->name, n->name ?: "(null)");
+				       n->name, n->name->name ?: "(null)");
 			}
 #endif
 		__putname(name);
@@ -2098,8 +2106,8 @@ void audit_putname(const char *name)
 			       " put_count=%d\n",
 			       __FILE__, __LINE__,
 			       context->serial, context->major,
-			       context->in_syscall, name, context->name_count,
-			       context->put_count);
+			       context->in_syscall, name->name,
+			       context->name_count, context->put_count);
 			dump_stack();
 		}
 	}
@@ -2158,7 +2166,7 @@ void __audit_inode(const char *name, const struct dentry *dentry)
 		return;
 
 	list_for_each_entry_reverse(n, &context->names_list, list) {
-		if (n->name && (n->name == name))
+		if (n->name && (n->name->name == name))
 			goto out;
 	}
 
@@ -2206,9 +2214,9 @@ void __audit_inode_child(const struct dentry *dentry,
 			continue;
 
 		if (n->ino == parent->i_ino &&
-		    !audit_compare_dname_path(dname, n->name, &dirlen)) {
+		    !audit_compare_dname_path(dname, n->name->name, &dirlen)) {
 			n->name_len = dirlen; /* update parent data in place */
-			found_parent = n->name;
+			found_parent = n->name->name;
 			goto add_names;
 		}
 	}
@@ -2219,13 +2227,13 @@ void __audit_inode_child(const struct dentry *dentry,
 			continue;
 
 		/* strcmp() is the more likely scenario */
-		if (!strcmp(dname, n->name) ||
-		     !audit_compare_dname_path(dname, n->name, &dirlen)) {
+		if (!strcmp(dname, n->name->name) ||
+		     !audit_compare_dname_path(dname, n->name->name, &dirlen)) {
 			if (inode)
 				audit_copy_inode(n, NULL, inode);
 			else
 				n->ino = (unsigned long)-1;
-			found_child = n->name;
+			found_child = n->name->name;
 			goto add_names;
 		}
 	}
@@ -2247,7 +2255,7 @@ add_names:
 		 * directory. All names for this context are relinquished in
 		 * audit_free_names() */
 		if (found_parent) {
-			n->name = found_parent;
+			n->name->name = found_parent;
 			n->name_len = AUDIT_NAME_FULL;
 			/* don't call __putname() */
 			n->name_put = false;
@@ -2707,13 +2715,16 @@ void audit_core_dumps(long signr)
 	audit_log_end(ab);
 }
 
-void __audit_seccomp(unsigned long syscall)
+void __audit_seccomp(unsigned long syscall, long signr, int code)
 {
 	struct audit_buffer *ab;
 
 	ab = audit_log_start(NULL, GFP_KERNEL, AUDIT_ANOM_ABEND);
-	audit_log_abend(ab, "seccomp", SIGKILL);
+	audit_log_abend(ab, "seccomp", signr);
 	audit_log_format(ab, " syscall=%ld", syscall);
+	audit_log_format(ab, " compat=%d", is_compat_task());
+	audit_log_format(ab, " ip=0x%lx", KSTK_EIP(current));
+	audit_log_format(ab, " code=0x%x", code);
 	audit_log_end(ab);
 }
 

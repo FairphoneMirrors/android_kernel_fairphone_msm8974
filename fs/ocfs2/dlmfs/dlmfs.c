@@ -526,7 +526,7 @@ bail:
 static int dlmfs_create(struct inode *dir,
 			struct dentry *dentry,
 			umode_t mode,
-			struct nameidata *nd)
+			bool excl)
 {
 	int status = 0;
 	struct inode *inode;
@@ -640,6 +640,7 @@ static struct file_system_type dlmfs_fs_type = {
 	.mount		= dlmfs_mount,
 	.kill_sb	= kill_litter_super,
 };
+MODULE_ALIAS_FS("ocfs2_dlmfs");
 
 static int __init init_dlmfs_fs(void)
 {

@@ -417,7 +417,7 @@ static int cramfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 /*
  * Lookup and fill in the inode data..
  */
-static struct dentry * cramfs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
+static struct dentry * cramfs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
 	unsigned int offset = 0;
 	struct inode *inode = NULL;
@@ -573,6 +573,7 @@ static struct file_system_type cramfs_fs_type = {
 	.kill_sb	= kill_block_super,
 	.fs_flags	= FS_REQUIRES_DEV,
 };
+MODULE_ALIAS_FS("cramfs");
 
 static int __init init_cramfs_fs(void)
 {

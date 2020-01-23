@@ -22,7 +22,8 @@
 #define CDBG(fmt, args...) do { } while (0)
 #define S_I2C_DBG(fmt, args...) do { } while (0)
 #endif
-
+#define MAX_I2C_ADDR_TYPE_SIZE (MSM_CAMERA_I2C_3B_ADDR + 1)
+#define MAX_I2C_DATA_TYPE_SIZE (MSM_CAMERA_I2C_SET_BYTE_WRITE_MASK_DATA + 1)
 #define I2C_COMPARE_MATCH 0
 #define I2C_COMPARE_MISMATCH 1
 #define I2C_POLL_MAX_ITERATION 20
@@ -33,7 +34,7 @@ int32_t msm_camera_cci_i2c_read(struct msm_camera_i2c_client *client,
 	enum msm_camera_i2c_data_type data_type)
 {
 	int32_t rc = -EFAULT;
-	unsigned char buf[client->addr_type+data_type];
+	unsigned char buf[MAX_I2C_ADDR_TYPE_SIZE + MAX_I2C_DATA_TYPE_SIZE];
 	struct msm_camera_cci_ctrl cci_ctrl;
 
 	if ((client->addr_type != MSM_CAMERA_I2C_BYTE_ADDR
@@ -149,17 +150,27 @@ int32_t msm_camera_cci_i2c_write_seq(struct msm_camera_i2c_client *client,
 	int32_t rc = -EFAULT;
 	uint8_t i = 0;
 	struct msm_camera_cci_ctrl cci_ctrl;
-	struct msm_camera_i2c_reg_array reg_conf_tbl[num_byte];
+	struct msm_camera_i2c_reg_array *reg_conf_tbl = NULL;
 
 	if ((client->addr_type != MSM_CAMERA_I2C_BYTE_ADDR
 		&& client->addr_type != MSM_CAMERA_I2C_WORD_ADDR)
 		|| num_byte == 0)
 		return rc;
+	if (num_byte > I2C_SEQ_REG_DATA_MAX) {
+		pr_err("%s: num_byte=%d clamped to max supported %d\n",
+			__func__, num_byte, I2C_SEQ_REG_DATA_MAX);
+		return rc;
+	}
 
 	S_I2C_DBG("%s reg addr = 0x%x num bytes: %d\n",
-			  __func__, addr, num_byte);
-	memset(reg_conf_tbl, 0,
-		num_byte * sizeof(struct msm_camera_i2c_reg_array));
+		__func__, addr, num_byte);
+
+	reg_conf_tbl = kzalloc(num_byte *
+		(sizeof(struct msm_camera_i2c_reg_array)), GFP_KERNEL);
+	if (!reg_conf_tbl) {
+		pr_err("%s:%d no memory\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
 	reg_conf_tbl[0].reg_addr = addr;
 	for (i = 0; i < num_byte; i++) {
 		reg_conf_tbl[i].reg_data = data[i];
@@ -175,6 +186,8 @@ int32_t msm_camera_cci_i2c_write_seq(struct msm_camera_i2c_client *client,
 			core, ioctl, VIDIOC_MSM_CCI_CFG, &cci_ctrl);
 	CDBG("%s line %d rc = %d\n", __func__, __LINE__, rc);
 	rc = cci_ctrl.status;
+	kfree(reg_conf_tbl);
+	reg_conf_tbl = NULL;
 	return rc;
 }
 

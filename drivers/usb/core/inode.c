@@ -211,7 +211,7 @@ static void update_bus(struct dentry *bus)
 
 	mutex_lock(&bus->d_inode->i_mutex);
 
-	list_for_each_entry(dev, &bus->d_subdirs, d_u.d_child)
+	list_for_each_entry(dev, &bus->d_subdirs, d_child)
 		if (dev->d_inode)
 			update_dev(dev);
 
@@ -228,7 +228,7 @@ static void update_sb(struct super_block *sb)
 
 	mutex_lock_nested(&root->d_inode->i_mutex, I_MUTEX_PARENT);
 
-	list_for_each_entry(bus, &root->d_subdirs, d_u.d_child) {
+	list_for_each_entry(bus, &root->d_subdirs, d_child) {
 		if (bus->d_inode) {
 			switch (S_IFMT & bus->d_inode->i_mode) {
 			case S_IFDIR:
@@ -293,7 +293,7 @@ static struct inode *usbfs_get_inode (struct super_block *sb, umode_t mode, dev_
 			break;
 		}
 	}
-	return inode; 
+	return inode;
 }
 
 /* SMP-safe */
@@ -342,7 +342,7 @@ static int usbfs_empty (struct dentry *dentry)
 
 	spin_lock(&dentry->d_lock);
 	list_for_each(list, &dentry->d_subdirs) {
-		struct dentry *de = list_entry(list, struct dentry, d_u.d_child);
+		struct dentry *de = list_entry(list, struct dentry, d_child);
 
 		spin_lock_nested(&de->d_lock, DENTRY_D_LOCK_NESTED);
 		if (usbfs_positive(de)) {
@@ -413,13 +413,13 @@ static loff_t default_file_lseek (struct file *file, loff_t offset, int orig)
 		if (offset > 0) {
 			file->f_pos = offset;
 			retval = file->f_pos;
-		} 
+		}
 		break;
 	case 1:
 		if ((offset + file->f_pos) > 0) {
 			file->f_pos += offset;
 			retval = file->f_pos;
-		} 
+		}
 		break;
 	default:
 		break;
@@ -475,7 +475,7 @@ static int fs_create_by_name (const char *name, umode_t mode,
 	int error = 0;
 
 	/* If the parent is not specified, we create it in the root.
-	 * We need the root dentry to do this, which is in the super 
+	 * We need the root dentry to do this, which is in the super
 	 * block. A pointer to that is in the struct vfsmount that we
 	 * have around.
 	 */
@@ -495,7 +495,7 @@ static int fs_create_by_name (const char *name, umode_t mode,
 	if (!IS_ERR(*dentry)) {
 		if (S_ISDIR(mode))
 			error = usbfs_mkdir (parent->d_inode, *dentry, mode);
-		else 
+		else
 			error = usbfs_create (parent->d_inode, *dentry, mode);
 	} else
 		error = PTR_ERR(*dentry);
@@ -534,7 +534,7 @@ static struct dentry *fs_create_file (const char *name, umode_t mode,
 static void fs_remove_file (struct dentry *dentry)
 {
 	struct dentry *parent = dentry->d_parent;
-	
+
 	if (!parent || !parent->d_inode)
 		return;
 
@@ -592,7 +592,7 @@ static int create_special_files (void)
 	}
 
 	goto exit;
-	
+
 error_clean_mounts:
 	simple_release_fs(&usbfs_mount, &usbfs_mount_count);
 exit:

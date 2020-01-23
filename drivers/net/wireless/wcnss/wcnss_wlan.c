@@ -419,7 +419,7 @@ static struct {
 	int	user_cal_read;
 	int	user_cal_available;
 	u32	user_cal_rcvd;
-	int	user_cal_exp_size;
+	u32	user_cal_exp_size;
 	int	iris_xo_mode_set;
 	int	fw_vbatt_state;
 	int	ctrl_device_opened;
@@ -2795,7 +2795,7 @@ static ssize_t wcnss_wlan_write(struct file *fp, const char __user
 	mutex_lock(&penv->dev_lock);
 	if ((UINT32_MAX - count < penv->user_cal_rcvd) ||
 		(penv->user_cal_exp_size < count + penv->user_cal_rcvd)) {
-		pr_err(DEVICE " invalid size to write %d\n", count +
+		pr_err(DEVICE " invalid size to write %zu\n", count +
 				penv->user_cal_rcvd);
 		mutex_unlock(&penv->dev_lock);
 		return -ENOMEM;

@@ -578,9 +578,9 @@ check_entry(const struct ip6t_entry *e)
 {
 	const struct xt_entry_target *t;
 
-	if (!ip6_checkentry(&e->ipv6)) 
+	if (!ip6_checkentry(&e->ipv6))
 		return -EINVAL;
-	
+
 	if (e->target_offset + sizeof(struct xt_entry_target) >
 	    e->next_offset)
 		return -EINVAL;
@@ -670,10 +670,6 @@ find_check_entry(struct ip6t_entry *e, struct net *net, const char *name,
 	struct xt_mtchk_param mtpar;
 	struct xt_entry_match *ematch;
 
-	//e->counters.pcnt = xt_percpu_counter_alloc();
- 	//if (IS_ERR_VALUE(e->counters.pcnt))
- 	//	return -ENOMEM;
-
 	j = 0;
 	mtpar.net	= net;
 	mtpar.table     = name;
@@ -737,9 +733,11 @@ check_entry_size_and_hooks(struct ip6t_entry *e,
 			   unsigned int valid_hooks)
 {
 	unsigned int h;
-    int err;
+	int err;
+
 	if ((unsigned long)e % __alignof__(struct ip6t_entry) != 0 ||
-	    (unsigned char *)e + sizeof(struct ip6t_entry) >= limit) {
+	    (unsigned char *)e + sizeof(struct ip6t_entry) >= limit ||
+	    (unsigned char *)e + e->next_offset > limit) {
 		duprintf("Bad offset %p\n", e);
 		return -EINVAL;
 	}
@@ -750,6 +748,10 @@ check_entry_size_and_hooks(struct ip6t_entry *e,
 			 e, e->next_offset);
 		return -EINVAL;
 	}
+
+	err = check_entry(e);
+	if (err)
+		return err;
 
 	/* Check hooks & underflows */
 	for (h = 0; h < NF_INET_NUMHOOKS; h++) {
@@ -1501,7 +1503,8 @@ check_compat_entry_size_and_hooks(struct compat_ip6t_entry *e,
 
 	duprintf("check_compat_entry_size_and_hooks %p\n", e);
 	if ((unsigned long)e % __alignof__(struct compat_ip6t_entry) != 0 ||
-	    (unsigned char *)e + sizeof(struct compat_ip6t_entry) >= limit) {
+	    (unsigned char *)e + sizeof(struct compat_ip6t_entry) >= limit ||
+	    (unsigned char *)e + e->next_offset > limit) {
 		duprintf("Bad offset %p, limit = %p\n", e, limit);
 		return -EINVAL;
 	}

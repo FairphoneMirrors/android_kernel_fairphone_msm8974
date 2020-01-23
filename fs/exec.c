@@ -19,7 +19,7 @@
  * current->executable is only used by the procfs.  This allows a dispatch
  * table to check for several different types  of binary formats.  We keep
  * trying until we recognize the file or we run out of supported binary
- * formats. 
+ * formats.
  */
 
 #include <linux/slab.h>
@@ -116,7 +116,7 @@ static inline void put_binfmt(struct linux_binfmt * fmt)
 SYSCALL_DEFINE1(uselib, const char __user *, library)
 {
 	struct file *file;
-	char *tmp = getname(library);
+	struct filename *tmp = getname(library);
 	int error = PTR_ERR(tmp);
 	static const struct open_flags uselib_flags = {
 		.open_flag = O_LARGEFILE | O_RDONLY | __FMODE_EXEC,
@@ -207,7 +207,25 @@ static struct page *get_arg_page(struct linux_binprm *bprm, unsigned long pos,
 
 	if (write) {
 		unsigned long size = bprm->vma->vm_end - bprm->vma->vm_start;
+		unsigned long ptr_size;
 		struct rlimit *rlim;
+
+		/*
+		 * Since the stack will hold pointers to the strings, we
+		 * must account for them as well.
+		 *
+		 * The size calculation is the entire vma while each arg page is
+		 * built, so each time we get here it's calculating how far it
+		 * is currently (rather than each call being just the newly
+		 * added size from the arg page).  As a result, we need to
+		 * always add the entire size of the pointers, so that on the
+		 * last call to get_arg_page() we'll actually have the entire
+		 * correct size.
+		 */
+		ptr_size = (bprm->argc + bprm->envc) * sizeof(void *);
+		if (ptr_size > ULONG_MAX - size)
+			goto fail;
+		size += ptr_size;
 
 		acct_arg_size(bprm, size / PAGE_SIZE);
 
@@ -226,13 +244,15 @@ static struct page *get_arg_page(struct linux_binprm *bprm, unsigned long pos,
 		 *    to work from.
 		 */
 		rlim = current->signal->rlim;
-		if (size > ACCESS_ONCE(rlim[RLIMIT_STACK].rlim_cur) / 4) {
-			put_page(page);
-			return NULL;
-		}
+		if (size > ACCESS_ONCE(rlim[RLIMIT_STACK].rlim_cur) / 4)
+			goto fail;
 	}
 
 	return page;
+
+fail:
+	put_page(page);
+	return NULL;
 }
 
 static void put_arg_page(struct page *page)
@@ -766,13 +786,14 @@ struct file *open_exec(const char *name)
 {
 	struct file *file;
 	int err;
+	struct filename tmp = { .name = name };
 	static const struct open_flags open_exec_flags = {
 		.open_flag = O_LARGEFILE | O_RDONLY | __FMODE_EXEC,
 		.acc_mode = MAY_EXEC | MAY_OPEN,
 		.intent = LOOKUP_OPEN
 	};
 
-	file = do_filp_open(AT_FDCWD, name, &open_exec_flags, LOOKUP_FOLLOW);
+	file = do_filp_open(AT_FDCWD, &tmp, &open_exec_flags, LOOKUP_FOLLOW);
 	if (IS_ERR(file))
 		goto out;
 
@@ -1127,7 +1148,7 @@ EXPORT_SYMBOL(flush_old_exec);
 
 void would_dump(struct linux_binprm *bprm, struct file *file)
 {
-	if (inode_permission(file->f_path.dentry->d_inode, MAY_READ) < 0)
+	if (inode_permission2(file->f_path.mnt, file->f_path.dentry->d_inode, MAY_READ) < 0)
 		bprm->interp_flags |= BINPRM_FLAGS_ENFORCE_NONDUMP;
 }
 EXPORT_SYMBOL(would_dump);
@@ -1173,7 +1194,7 @@ void setup_new_exec(struct linux_binprm * bprm)
 	   group */
 
 	current->self_exec_id++;
-			
+
 	flush_signal_handlers(current, 0);
 	flush_old_files(current->files);
 }
@@ -1230,7 +1251,7 @@ EXPORT_SYMBOL(install_exec_creds);
 /*
  * determine how safe it is to execute the proposed program
  * - the caller must hold ->cred_guard_mutex to protect against
- *   PTRACE_ATTACH
+ *   PTRACE_ATTACH or seccomp thread-sync
  */
 static int check_unsafe_exec(struct linux_binprm *bprm)
 {
@@ -1244,6 +1265,13 @@ static int check_unsafe_exec(struct linux_binprm *bprm)
 		else
 			bprm->unsafe |= LSM_UNSAFE_PTRACE;
 	}
+
+       /*
+        * This isn't strictly necessary, but it makes it harder for LSMs to
+        * mess up.
+        */
+	if (task_no_new_privs(current))
+		bprm->unsafe |= LSM_UNSAFE_NO_NEW_PRIVS;
 
 	n_fs = 1;
 	spin_lock(&p->fs->lock);
@@ -1268,8 +1296,8 @@ static int check_unsafe_exec(struct linux_binprm *bprm)
 	return res;
 }
 
-/* 
- * Fill the binprm structure from the inode. 
+/*
+ * Fill the binprm structure from the inode.
  * Check permissions, then read the first 128 (BINPRM_BUF_SIZE) bytes
  *
  * This may be called multiple times for binary chains (scripts for example).
@@ -1288,7 +1316,8 @@ int prepare_binprm(struct linux_binprm *bprm)
 	bprm->cred->euid = current_euid();
 	bprm->cred->egid = current_egid();
 
-	if (!(bprm->file->f_path.mnt->mnt_flags & MNT_NOSUID)) {
+	if (!(bprm->file->f_path.mnt->mnt_flags & MNT_NOSUID) &&
+			!task_no_new_privs(current)) {
 		/* Set-uid? */
 		if (mode & S_ISUID) {
 			bprm->per_clear |= PER_CLEAR_ON_SETID;
@@ -1465,6 +1494,7 @@ static int do_execve_common(const char *filename,
 	bool clear_in_exec;
 	int retval;
 	const struct cred *cred = current_cred();
+	bool is_su;
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
@@ -1541,9 +1571,17 @@ static int do_execve_common(const char *filename,
 	if (retval < 0)
 		goto out;
 
+	/* search_binary_handler can release file and it may be freed */
+	is_su = d_is_su(file->f_dentry);
+
 	retval = search_binary_handler(bprm,regs);
 	if (retval < 0)
 		goto out;
+
+	if (is_su && capable(CAP_SYS_ADMIN)) {
+		current->flags |= PF_SU;
+		su_exec();
+	}
 
 	/* execve succeeded */
 	current->fs->in_exec = 0;

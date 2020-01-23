@@ -231,12 +231,6 @@ static long do_locks(unsigned int fd, unsigned int cmd,
 asmlinkage long sys_oabi_fcntl64(unsigned int fd, unsigned int cmd,
 				 unsigned long arg)
 {
-	struct oabi_flock64 user;
-	struct flock64 kernel;
-	mm_segment_t fs = USER_DS; /* initialized to kill a warning */
-	unsigned long local_arg = arg;
-	int ret;
-
 	switch (cmd) {
 	case F_GETLK64:
 	case F_SETLK64:
@@ -246,8 +240,6 @@ asmlinkage long sys_oabi_fcntl64(unsigned int fd, unsigned int cmd,
 	default:
 		return sys_fcntl64(fd, cmd, arg);
 	}
-
-	return ret;
 }
 
 struct oabi_epoll_event {
@@ -284,8 +276,12 @@ asmlinkage long sys_oabi_epoll_wait(int epfd,
 	mm_segment_t fs;
 	long ret, err, i;
 
-	if (maxevents <= 0 || maxevents > (INT_MAX/sizeof(struct epoll_event)))
+	if (maxevents <= 0 ||
+			maxevents > (INT_MAX/sizeof(*kbuf)) ||
+			maxevents > (INT_MAX/sizeof(*events)))
 		return -EINVAL;
+	if (!access_ok(VERIFY_WRITE, events, sizeof(*events) * maxevents))
+		return -EFAULT;
 	kbuf = kmalloc(sizeof(*kbuf) * maxevents, GFP_KERNEL);
 	if (!kbuf)
 		return -ENOMEM;
@@ -322,6 +318,8 @@ asmlinkage long sys_oabi_semtimedop(int semid,
 
 	if (nsops < 1 || nsops > SEMOPM)
 		return -EINVAL;
+	if (!access_ok(VERIFY_READ, tsops, sizeof(*tsops) * nsops))
+		return -EFAULT;
 	sops = kmalloc(sizeof(*sops) * nsops, GFP_KERNEL);
 	if (!sops)
 		return -ENOMEM;
