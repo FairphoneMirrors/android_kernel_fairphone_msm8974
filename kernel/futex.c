@@ -331,7 +331,7 @@ again:
 	 * page lock will be acquired only if it is unavoidable
 	 */
 
-	mapping = ACCESS_ONCE(page_head->mapping);
+	mapping = READ_ONCE(page_head->mapping);
 
 	/*
 	 * If page_head->mapping is NULL, then it cannot be a PageAnon
@@ -409,14 +409,14 @@ again:
 		 */
 		rcu_read_lock();
 
-		if (ACCESS_ONCE(page_head->mapping) != mapping) {
+		if (READ_ONCE(page_head->mapping) != mapping) {
 			rcu_read_unlock();
 			put_page(page_head);
 
 			goto again;
 		}
 
-		inode = ACCESS_ONCE(mapping->host);
+		inode = READ_ONCE(mapping->host);
 		if (!inode) {
 			rcu_read_unlock();
 			put_page(page_head);
