@@ -41,7 +41,6 @@
 
 #define CACHE_LINE_SIZE 32
 #define CE_SHA_BLOCK_SIZE SHA256_BLOCK_SIZE
-#define U32_MAX		((u32)~0U)
 
 /* are FIPS integrity tests done ?? */
 bool is_fips_qcedev_integritytest_done;
@@ -1598,7 +1597,7 @@ static int qcedev_check_cipher_params(struct qcedev_cipher_op_req *req,
 	}
 	/* Check for sum of all dst length is equal to data_len  */
 	for (i = 0, total = 0; i < req->entries; i++) {
-		if (req->vbuf.dst[i].len >= ULONG_MAX - total) {
+		if (req->vbuf.dst[i].len >= U32_MAX - total) {
 			pr_err("%s: Integer overflow on total req dst vbuf length\n",
 				__func__);
 			goto error;
