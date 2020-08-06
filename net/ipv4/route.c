@@ -960,8 +960,7 @@ void rt_cache_flush_batch(struct net *net)
 
 static void rt_emergency_hash_rebuild(struct net *net)
 {
-	if (net_ratelimit())
-		pr_warn("Route hash chain too long!\n");
+	net_warn_ratelimited("Route hash chain too long!\n");
 	rt_cache_invalidate(net);
 }
 
@@ -1084,8 +1083,7 @@ static int rt_garbage_collect(struct dst_ops *ops)
 		goto out;
 	if (dst_entries_get_slow(&ipv4_dst_ops) < ip_rt_max_size)
 		goto out;
-	if (net_ratelimit())
-		pr_warn("dst cache overflow\n");
+	net_warn_ratelimited("dst cache overflow\n");
 	RT_CACHE_STAT_INC(gc_dst_overflow);
 	return 1;
 
@@ -1182,8 +1180,7 @@ restart:
 		if (rt->rt_type == RTN_UNICAST || rt_is_output_route(rt)) {
 			int err = rt_bind_neighbour(rt);
 			if (err) {
-				if (net_ratelimit())
-					pr_warn("Neighbour table failure & not caching routes\n");
+				net_warn_ratelimited("Neighbour table failure & not caching routes\n");
 				ip_rt_put(rt);
 				return ERR_PTR(err);
 			}
@@ -1299,8 +1296,7 @@ restart:
 				goto restart;
 			}
 
-			if (net_ratelimit())
-				pr_warn("Neighbour table overflow\n");
+			net_warn_ratelimited("Neighbour table overflow\n");
 			rt_drop(rt);
 			return ERR_PTR(-ENOBUFS);
 		}
@@ -1378,8 +1374,7 @@ void __ip_select_ident(struct iphdr *iph, struct dst_entry *dst, int more)
 			return;
 		}
 	} else if (!rt)
-		printk(KERN_DEBUG "rt_bind_peer(0) @%p\n",
-		       __builtin_return_address(0));
+		pr_debug("rt_bind_peer(0) @%p\n", __builtin_return_address(0));
 
 	ip_select_fb_ident(iph);
 }
@@ -1503,11 +1498,11 @@ void ip_rt_redirect(__be32 old_gw, __be32 daddr, __be32 new_gw,
 
 reject_redirect:
 #ifdef CONFIG_IP_ROUTE_VERBOSE
-	if (IN_DEV_LOG_MARTIANS(in_dev) && net_ratelimit())
-		pr_info("Redirect from %pI4 on %s about %pI4 ignored\n"
-			"  Advised path = %pI4 -> %pI4\n",
-			&old_gw, dev->name, &new_gw,
-			&saddr, &daddr);
+	if (IN_DEV_LOG_MARTIANS(in_dev))
+		net_info_ratelimited("Redirect from %pI4 on %s about %pI4 ignored\n"
+				     "  Advised path = %pI4 -> %pI4\n",
+				     &old_gw, dev->name, &new_gw,
+				     &saddr, &daddr);
 #endif
 	;
 }
@@ -1617,11 +1612,10 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 		++peer->rate_tokens;
 #ifdef CONFIG_IP_ROUTE_VERBOSE
 		if (log_martians &&
-		    peer->rate_tokens == ip_rt_redirect_number &&
-		    net_ratelimit())
-			pr_warn("host %pI4/if%d ignores redirects for %pI4 to %pI4\n",
-				&ip_hdr(skb)->saddr, rt->rt_iif,
-				&rt->rt_dst, &rt->rt_gateway);
+		    peer->rate_tokens == ip_rt_redirect_number)
+			net_warn_ratelimited("host %pI4/if%d ignores redirects for %pI4 to %pI4\n",
+					     &ip_hdr(skb)->saddr, rt->rt_iif,
+					     &rt->rt_dst, &rt->rt_gateway);
 #endif
 	}
 }
@@ -1674,67 +1668,6 @@ out:	kfree_skb(skb);
 	return 0;
 }
 
-/*
- *	The last two values are not from the RFC but
- *	are needed for AMPRnet AX.25 paths.
- */
-
-static const unsigned short mtu_plateau[] =
-{32000, 17914, 8166, 4352, 2002, 1492, 576, 296, 216, 128 };
-
-static inline unsigned short guess_mtu(unsigned short old_mtu)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(mtu_plateau); i++)
-		if (old_mtu > mtu_plateau[i])
-			return mtu_plateau[i];
-	return 68;
-}
-
-unsigned short ip_rt_frag_needed(struct net *net, const struct iphdr *iph,
-				 unsigned short new_mtu,
-				 struct net_device *dev)
-{
-	unsigned short old_mtu = ntohs(iph->tot_len);
-	unsigned short est_mtu = 0;
-	struct inet_peer *peer;
-
-	peer = inet_getpeer_v4(iph->daddr, 1);
-	if (peer) {
-		unsigned short mtu = new_mtu;
-
-		if (new_mtu < 68 || new_mtu >= old_mtu) {
-			/* BSD 4.2 derived systems incorrectly adjust
-			 * tot_len by the IP header length, and report
-			 * a zero MTU in the ICMP message.
-			 */
-			if (mtu == 0 &&
-			    old_mtu >= 68 + (iph->ihl << 2))
-				old_mtu -= iph->ihl << 2;
-			mtu = guess_mtu(old_mtu);
-		}
-
-		if (mtu < ip_rt_min_pmtu)
-			mtu = ip_rt_min_pmtu;
-		if (!peer->pmtu_expires || mtu < peer->pmtu_learned) {
-			unsigned long pmtu_expires;
-
-			pmtu_expires = jiffies + ip_rt_mtu_expires;
-			if (!pmtu_expires)
-				pmtu_expires = 1UL;
-
-			est_mtu = mtu;
-			peer->pmtu_learned = mtu;
-			peer->pmtu_expires = pmtu_expires;
-			atomic_inc(&__rt_peer_genid);
-		}
-
-		inet_putpeer(peer);
-	}
-	return est_mtu ? : new_mtu;
-}
-
 static void check_peer_pmtu(struct dst_entry *dst, struct inet_peer *peer)
 {
 	unsigned long expires = ACCESS_ONCE(peer->pmtu_expires);
@@ -1783,6 +1716,34 @@ static void ip_rt_update_pmtu(struct dst_entry *dst, u32 mtu)
 	}
 }
 
+void ipv4_update_pmtu(struct sk_buff *skb, struct net *net, u32 mtu,
+		      int oif, u32 mark, u8 protocol, int flow_flags)
+{
+	const struct iphdr *iph = (const struct iphdr *)skb->data;
+	struct flowi4 fl4;
+	struct rtable *rt;
+
+	flowi4_init_output(&fl4, oif, mark, RT_TOS(iph->tos), RT_SCOPE_UNIVERSE,
+			   protocol, flow_flags | FLOWI_FLAG_PRECOW_METRICS,
+			   iph->daddr, iph->saddr, 0, 0);
+	rt = __ip_route_output_key(net, &fl4);
+	if (!IS_ERR(rt)) {
+		ip_rt_update_pmtu(&rt->dst, mtu);
+		ip_rt_put(rt);
+	}
+}
+EXPORT_SYMBOL_GPL(ipv4_update_pmtu);
+
+void ipv4_sk_update_pmtu(struct sk_buff *skb, struct sock *sk, u32 mtu)
+{
+	const struct inet_sock *inet = inet_sk(sk);
+
+	return ipv4_update_pmtu(skb, sock_net(sk), mtu,
+				sk->sk_bound_dev_if, sk->sk_mark,
+				inet->hdrincl ? IPPROTO_RAW : sk->sk_protocol,
+				inet_sk_flowi_flags(sk));
+}
+EXPORT_SYMBOL_GPL(ipv4_sk_update_pmtu);
 
 static void ipv4_validate_peer(struct rtable *rt)
 {
@@ -1844,9 +1805,9 @@ static void ipv4_link_failure(struct sk_buff *skb)
 
 static int ip_rt_bug(struct sk_buff *skb)
 {
-	printk(KERN_DEBUG "ip_rt_bug: %pI4 -> %pI4, %s\n",
-		&ip_hdr(skb)->saddr, &ip_hdr(skb)->daddr,
-		skb->dev ? skb->dev->name : "?");
+	pr_debug("%s: %pI4 -> %pI4, %s\n",
+		 __func__, &ip_hdr(skb)->saddr, &ip_hdr(skb)->daddr,
+		 skb->dev ? skb->dev->name : "?");
 	kfree_skb(skb);
 	WARN_ON(1);
 	return 0;
@@ -2135,8 +2096,7 @@ static int __mkroute_input(struct sk_buff *skb,
 	/* get a working reference to the output device */
 	out_dev = __in_dev_get_rcu(FIB_RES_DEV(*res));
 	if (out_dev == NULL) {
-		if (net_ratelimit())
-			pr_crit("Bug in ip_route_input_slow(). Please report.\n");
+		net_crit_ratelimited("Bug in ip_route_input_slow(). Please report.\n");
 		return -EINVAL;
 	}
 
@@ -2217,7 +2177,7 @@ static int ip_mkroute_input(struct sk_buff *skb,
 			    struct in_device *in_dev,
 			    __be32 daddr, __be32 saddr, u32 tos)
 {
-	struct rtable* rth = NULL;
+	struct rtable *rth = NULL;
 	int err;
 	unsigned hash;
 
@@ -2259,11 +2219,11 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	struct flowi4	fl4;
 	unsigned	flags = 0;
 	u32		itag = 0;
-	struct rtable * rth;
+	struct rtable *rth;
 	unsigned	hash;
 	__be32		spec_dst;
 	int		err = -EINVAL;
-	struct net    * net = dev_net(dev);
+	struct net    *net = dev_net(dev);
 
 	/* IP on this device is disabled. */
 
@@ -2408,9 +2368,9 @@ no_route:
 martian_destination:
 	RT_CACHE_STAT_INC(in_martian_dst);
 #ifdef CONFIG_IP_ROUTE_VERBOSE
-	if (IN_DEV_LOG_MARTIANS(in_dev) && net_ratelimit())
-		pr_warn("martian destination %pI4 from %pI4, dev %s\n",
-			&daddr, &saddr, dev->name);
+	if (IN_DEV_LOG_MARTIANS(in_dev))
+		net_warn_ratelimited("martian destination %pI4 from %pI4, dev %s\n",
+				     &daddr, &saddr, dev->name);
 #endif
 
 e_hostunreach:
@@ -2435,7 +2395,7 @@ martian_source_keep_err:
 int ip_route_input_common(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 			   u8 tos, struct net_device *dev, bool noref)
 {
-	struct rtable * rth;
+	struct rtable *rth;
 	unsigned	hash;
 	int iif = dev->ifindex;
 	struct net *net;
@@ -3068,7 +3028,7 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
+static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh, void *arg)
 {
 	struct net *net = sock_net(in_skb->sk);
 	struct rtmsg *rtm;

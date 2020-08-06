@@ -34,6 +34,7 @@
 #define NEXTHDR_IPV6		41	/* IPv6 in IPv6 */
 #define NEXTHDR_ROUTING		43	/* Routing header. */
 #define NEXTHDR_FRAGMENT	44	/* Fragmentation/reassembly header. */
+#define NEXTHDR_GRE		47	/* GRE header. */
 #define NEXTHDR_ESP		50	/* Encapsulating security payload. */
 #define NEXTHDR_AUTH		51	/* Authentication header. */
 #define NEXTHDR_ICMP		58	/* ICMP for IPv6. */
@@ -493,6 +494,20 @@ static inline int ipv6_addr_diff(const struct in6_addr *a1, const struct in6_add
 extern void ipv6_select_ident(struct frag_hdr *fhdr, struct rt6_info *rt);
 
 /*
+ *	Header manipulation
+ */
+static inline void ip6_flow_hdr(struct ipv6hdr *hdr, unsigned int tclass,
+				__be32 flowlabel)
+{
+	*(__be32 *)hdr = ntohl(0x60000000 | (tclass << 20)) | flowlabel;
+}
+
+static inline __be32 ip6_flowinfo(const struct ipv6hdr *hdr)
+{
+	return *(__be32 *)hdr & IPV6_FLOWINFO_MASK;
+}
+
+/*
  *	Prototypes exported by ipv6
  */
 
@@ -617,8 +632,10 @@ extern int			compat_ipv6_getsockopt(struct sock *sk,
 extern int			ip6_datagram_connect(struct sock *sk, 
 						     struct sockaddr *addr, int addr_len);
 
-extern int 			ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len);
-extern int 			ipv6_recv_rxpmtu(struct sock *sk, struct msghdr *msg, int len);
+extern int 			ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len,
+						int *addr_len);
+extern int 			ipv6_recv_rxpmtu(struct sock *sk, struct msghdr *msg, int len,
+						 int *addr_len);
 extern void			ipv6_icmp_error(struct sock *sk, struct sk_buff *skb, int err, __be16 port,
 						u32 info, u8 *payload);
 extern void			ipv6_local_error(struct sock *sk, int err, struct flowi6 *fl6, u32 info);
@@ -640,6 +657,7 @@ extern int inet6_hash_connect(struct inet_timewait_death_row *death_row,
  */
 extern const struct proto_ops inet6_stream_ops;
 extern const struct proto_ops inet6_dgram_ops;
+extern const struct proto_ops inet6_sockraw_ops;
 
 struct group_source_req;
 struct group_filter;

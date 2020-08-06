@@ -226,6 +226,9 @@ static void raw_err(struct sock *sk, struct sk_buff *skb, u32 info)
 	int err = 0;
 	int harderr = 0;
 
+	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
+		ipv4_sk_update_pmtu(skb, sk, info);
+
 	/* Report error on raw socket, if:
 	   1. User requested ip_recverr.
 	   2. Socket is connected (otherwise the error indication
@@ -298,7 +301,7 @@ void raw_icmp_error(struct sk_buff *skb, int protocol, u32 info)
 	read_unlock(&raw_v4_hashinfo.lock);
 }
 
-static int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
+static int raw_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
 	/* Charge it to the socket. */
 
@@ -714,11 +717,8 @@ static int raw_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	if (flags & MSG_OOB)
 		goto out;
 
-	if (addr_len)
-		*addr_len = sizeof(*sin);
-
 	if (flags & MSG_ERRQUEUE) {
-		err = ip_recv_error(sk, msg, len);
+		err = ip_recv_error(sk, msg, len, addr_len);
 		goto out;
 	}
 
@@ -744,6 +744,7 @@ static int raw_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 		sin->sin_addr.s_addr = ip_hdr(skb)->saddr;
 		sin->sin_port = 0;
 		memset(&sin->sin_zero, 0, sizeof(sin->sin_zero));
+		*addr_len = sizeof(*sin);
 	}
 	if (inet->cmsg_flags)
 		ip_cmsg_recv(msg, skb);

@@ -564,7 +564,7 @@ out:
 }
 EXPORT_SYMBOL(inet_bind);
 
-int inet_dgram_connect(struct socket *sock, struct sockaddr * uaddr,
+int inet_dgram_connect(struct socket *sock, struct sockaddr *uaddr,
 		       int addr_len, int flags)
 {
 	struct sock *sk = sock->sk;
@@ -1050,7 +1050,7 @@ static struct inet_protosw inetsw_array[] =
 		.type =       SOCK_DGRAM,
 		.protocol =   IPPROTO_ICMP,
 		.prot =       &ping_prot,
-		.ops =        &inet_dgram_ops,
+		.ops =        &inet_sockraw_ops,
 		.no_check =   UDP_CSUM_DEFAULT,
 		.flags =      INET_PROTOSW_REUSE,
        },
